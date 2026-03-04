@@ -1,13 +1,16 @@
 // ── WIND VECTOR OVERLAY ────────────────────────────────────────────────────────
-// Animated surface-wind arrows on a canvas overlay.
+// Animated surface-wind lines on a canvas overlay.
 // Architecture:
-//   • fetchAndStore()  — fetches Open-Meteo at a 4×3 coarse grid, IDW-
-//                        interpolates to a dense display grid, stores in
+//   • fetchAndStore()  — fetches Open-Meteo at a 4×3 coarse grid.
+//                        Coarse points that return null are land; those that
+//                        return data are ocean.  Display grid points are only
+//                        kept if their nearest ocean coarse point is closer
+//                        than their nearest land coarse point (Voronoi land mask).
+//                        Remaining points are IDW-interpolated and stored in
 //                        _currentPts.  Called on moveend/zoomend (debounced).
-//   • animateFrame()   — rAF loop that redraws _currentPts every frame.
-//                        Each point has a travelling "flow dot" whose position
-//                        advances with time, proportional to wind speed.
-//   Data is cached 30 min so panning doesn't flood the API.
+//   • animateFrame()   — rAF loop: draws a static line + a travelling dot per
+//                        point.  Dot speed is proportional to wind speed so
+//                        direction and strength are both visible.
 import { CONFIG } from './config.js';
 
 let _map        = null;
@@ -17,14 +20,18 @@ let _visible    = true;
 let _fetchTimer = null;
 let _animFrame  = null;
 
-let _currentPts = [];  // interpolated grid — kept alive between frames
+let _currentPts = [];   // ocean display points with interpolated wind data
 
-// Per-point phase offsets: key → [0,1) so dots don't all start in sync
-const _phases = new Map();
+// Per-point staggered phase: key → [0,1)
+const _phases  = new Map();
 
-// API result cache: 'lat2_lng2' → { speed, dir, fetched }
-const _cache  = {};
-const CACHE_MS = 1_800_000; // 30 min
+// Wind data cache (30 min): 'lat2_lng2' → { speed, dir, fetched }
+const _cache   = {};
+const CACHE_MS = 1_800_000;
+
+// Permanent land/ocean cache: 'lat2_lng2' → true (ocean) | false (land)
+// Land/ocean status never changes so no expiry.
+const _isOcean = {};
 
 const WIND_VARS = 'wind_speed_10m,wind_direction_10m';
 
@@ -65,18 +72,51 @@ function scheduleFetch() {
 async function fetchAndStore() {
   if (!_visible || !_map) return;
 
-  const coarse   = buildGrid(4, 3);
-  const windData = await fetchWindGrid(coarse);
-  if (windData.length === 0) return;
+  const coarseAll = buildGrid(4, 3);
 
-  _currentPts = buildDisplayGrid().map(pt => ({
+  // Fetch all coarse points, separating ocean from land
+  const results = await Promise.allSettled(
+    coarseAll.map(p => fetchWindAt(p.lat, p.lng))
+  );
+
+  const oceanPts = [];
+  const landPts  = [];
+  results.forEach((r, i) => {
+    const pt = coarseAll[i];
+    if (r.status === 'fulfilled' && r.value) {
+      oceanPts.push({ lat: pt.lat, lng: pt.lng, ...r.value });
+    } else {
+      landPts.push(pt);
+    }
+  });
+
+  if (oceanPts.length === 0) return;
+
+  // Build display grid, keeping only points that are likely over water
+  const displayPts = buildDisplayGrid()
+    .filter(pt => isLikelyOcean(pt, oceanPts, landPts));
+
+  _currentPts = displayPts.map(pt => ({
     lat: pt.lat,
     lng: pt.lng,
-    ...interpolateWind(windData, pt.lat, pt.lng),
+    ...interpolateWind(oceanPts, pt.lat, pt.lng),
   }));
 
-  // Start animation loop if not already running
   if (_animFrame === null) animateFrame();
+}
+
+// A display point is considered ocean when its nearest ocean coarse point
+// is closer than its nearest land coarse point (Voronoi boundary).
+function isLikelyOcean(pt, oceanPts, landPts) {
+  if (oceanPts.length === 0) return false;
+  const nearOcean = Math.min(...oceanPts.map(c => dist2(pt, c)));
+  if (landPts.length === 0)  return true;
+  const nearLand  = Math.min(...landPts.map(c => dist2(pt, c)));
+  return nearOcean <= nearLand;
+}
+
+function dist2(a, b) {
+  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
 }
 
 // ── ANIMATION LOOP ────────────────────────────────────────────────────────────
@@ -84,7 +124,6 @@ async function fetchAndStore() {
 function animateFrame() {
   if (!_visible) { _animFrame = null; return; }
 
-  // Keep canvas sized to map container
   const size = _map.getSize();
   if (_canvas.width !== size.x || _canvas.height !== size.y) {
     _canvas.width  = size.x;
@@ -104,38 +143,39 @@ function drawFrame(t) {
     if (px.x < -30 || px.y < -30 ||
         px.x > _canvas.width + 30 || px.y > _canvas.height + 30) continue;
 
-    const spd   = pt.speed;
-    const color = windColor(spd);
-    const len   = Math.min(4 + spd * 1.6, 28);
+    const spd      = pt.speed;
+    const color    = windColor(spd);
+    const len      = Math.min(4 + spd * 1.6, 28);
+    const toAngle  = ((pt.dir + 180) % 360) * Math.PI / 180;
+    const dx       = Math.sin(toAngle) * len;
+    const dy       = -Math.cos(toAngle) * len;
 
-    const toAngle = ((pt.dir + 180) % 360) * Math.PI / 180;
-    const dx = Math.sin(toAngle) * len;
-    const dy = -Math.cos(toAngle) * len;
+    // Static line (no arrowhead)
+    drawLine(ctx, px.x, px.y, dx, dy, color);
 
-    // Static arrow body
-    drawArrow(ctx, px.x, px.y, dx, dy, len, color);
-
-    // Animated flow dot: travels from tail to tip
+    // Travelling dot along the line (direction + speed indicator)
     const key   = ptKey(pt);
     if (!_phases.has(key)) _phases.set(key, Math.random());
     const phase = _phases.get(key);
-    const rate  = Math.max(0.25, spd / 12); // faster dot for stronger wind
-    const frac  = ((t * rate + phase) % 1);
+    const rate  = Math.max(0.25, spd / 12);
+    const frac  = (t * rate + phase) % 1;
 
     const dotX = (px.x - dx / 2) + dx * frac;
     const dotY = (px.y - dy / 2) + dy * frac;
-    const dotR = Math.min(1.8 + spd * 0.08, 3.2);
+    const dotR = Math.min(1.6 + spd * 0.07, 2.8);
 
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle   = color;
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = color;
     ctx.fill();
+    ctx.restore();
   }
 }
 
 // ── GRID BUILDERS ─────────────────────────────────────────────────────────────
 
-// Sparse coarse grid for API fetches
 function buildGrid(cols, rows) {
   const b   = _map.getBounds();
   const pts = [];
@@ -150,7 +190,6 @@ function buildGrid(cols, rows) {
   return pts;
 }
 
-// Dense display grid — step decreases with zoom for more arrows when zoomed in
 function buildDisplayGrid() {
   const zoom = _map.getZoom();
   const step = zoom >= 15 ? 0.012
@@ -170,28 +209,30 @@ function buildDisplayGrid() {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
-async function fetchWindGrid(pts) {
-  const results = await Promise.allSettled(pts.map(p => fetchWindAt(p.lat, p.lng)));
-  return results
-    .map((r, i) => (r.status === 'fulfilled' && r.value)
-      ? { lat: pts[i].lat, lng: pts[i].lng, ...r.value }
-      : null)
-    .filter(Boolean);
-}
-
 async function fetchWindAt(lat, lng) {
   const key = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
-  if (_cache[key] && Date.now() - _cache[key].fetched < CACHE_MS) return _cache[key];
+
+  // Permanent land cache: if we already know this point is land, skip fetch
+  if (_isOcean[key] === false) return null;
+
+  if (_cache[key] && Date.now() - _cache[key].fetched < CACHE_MS) {
+    return _cache[key];
+  }
+
   try {
     const url = `${CONFIG.api.openMeteoMarine}` +
       `?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}` +
       `&current=${WIND_VARS}&wind_speed_unit=kn`;
     const resp = await fetch(url);
-    if (!resp.ok) return null;
-    const d = await resp.json();
-    const c = d.current || {};
+    if (!resp.ok) {
+      _isOcean[key] = false; // land — remember permanently
+      return null;
+    }
+    const d     = await resp.json();
+    const c     = d.current || {};
     const entry = { speed: c.wind_speed_10m ?? 0, dir: c.wind_direction_10m ?? 0, fetched: Date.now() };
-    _cache[key] = entry;
+    _cache[key]   = entry;
+    _isOcean[key] = true;
     return entry;
   } catch { return null; }
 }
@@ -217,49 +258,27 @@ function interpolateWind(data, lat, lng) {
 
 // ── DRAWING ───────────────────────────────────────────────────────────────────
 
-function drawArrow(ctx, x, y, dx, dy, len, color) {
-  const tx0 = x - dx / 2, ty0 = y - dy / 2; // tail
-  const tx1 = x + dx / 2, ty1 = y + dy / 2; // tip
-
-  const headLen  = len * 0.36;
-  const toAngle  = Math.atan2(dx, -dy);
+function drawLine(ctx, x, y, dx, dy, color) {
+  const tx0 = x - dx / 2, ty0 = y - dy / 2;
+  const tx1 = x + dx / 2, ty1 = y + dy / 2;
 
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.fillStyle   = color;
-  ctx.lineWidth   = 1.2;
-  ctx.globalAlpha = 0.55;
+  ctx.lineWidth   = 1.0;
+  ctx.globalAlpha = 0.42;
   ctx.lineCap     = 'round';
-
-  // Shaft
   ctx.beginPath();
   ctx.moveTo(tx0, ty0);
   ctx.lineTo(tx1, ty1);
   ctx.stroke();
-
-  // Arrowhead
-  ctx.globalAlpha = 0.65;
-  ctx.beginPath();
-  ctx.moveTo(tx1, ty1);
-  ctx.lineTo(
-    tx1 - headLen * Math.sin(toAngle - 0.42),
-    ty1 + headLen * Math.cos(toAngle - 0.42)
-  );
-  ctx.lineTo(
-    tx1 - headLen * Math.sin(toAngle + 0.42),
-    ty1 + headLen * Math.cos(toAngle + 0.42)
-  );
-  ctx.closePath();
-  ctx.fill();
-
   ctx.restore();
 }
 
 function windColor(spd) {
-  if (spd < 5)  return 'rgba(0,229,255,0.85)';
-  if (spd < 15) return 'rgba(184,212,232,0.85)';
-  if (spd < 25) return 'rgba(255,179,71,0.85)';
-  return 'rgba(255,95,109,0.85)';
+  if (spd < 5)  return 'rgba(0,229,255,1)';
+  if (spd < 15) return 'rgba(184,212,232,1)';
+  if (spd < 25) return 'rgba(255,179,71,1)';
+  return 'rgba(255,95,109,1)';
 }
 
 function ptKey(pt) {
