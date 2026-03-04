@@ -1,0 +1,135 @@
+@{
+    ViewData["Title"] = "SpearTips";
+    Layout = "_Layout";
+}
+
+<!-- Map canvas -->
+<div id="map"></div>
+
+<!-- ── LEFT COLUMN ────────────────────────────────────────────────────────── -->
+<div id="left-col">
+  <div id="search-wrap">
+    <input id="search-input" type="text" placeholder="Search location…" autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div class="left-col-label">Popular Spots</div>
+  <div id="cards-bar"></div>
+  <div class="left-col-label" id="favs-label" style="display:none">Favourites</div>
+  <div id="favs-bar"></div>
+</div>
+
+<!-- ── SIDE PANEL ─────────────────────────────────────────────────────────── -->
+<div id="panel">
+
+  <!-- Brand -->
+  <div class="panel-brand">
+    <div class="logo">SPEAR<em>TIPS</em></div>
+    <div class="live-badge"><div class="pulse"></div><span class="live-txt">Live</span></div>
+  </div>
+
+  <!-- Map base selector -->
+  <div class="p-section">
+    <div class="p-label">Map Base</div>
+    <div class="tile-grid">
+      <button class="tile-btn active" data-tile="0">Simple</button>
+      <button class="tile-btn"        data-tile="1">Satellite</button>
+    </div>
+  </div>
+
+  <!-- Data layers -->
+  <div class="p-section">
+    <div class="p-label">Data Layers</div>
+
+    <div class="layer-row" data-layer="closures">
+      <div class="l-dot" style="background:#ff5f6d"></div>
+      <div class="l-info">
+        <div class="l-name">Closure Zones</div>
+        <div class="l-src"><span class="api-badge b-nsw">NSW DPI</span> aquatic reserves</div>
+      </div>
+      <div class="sw on" id="sw-closures"><div class="sw-k"></div></div>
+    </div>
+
+    <div class="layer-row" data-layer="habitat">
+      <div class="l-dot" style="background:#2d8a2d"></div>
+      <div class="l-info">
+        <div class="l-name">Habitat</div>
+        <div class="l-src"><span class="api-badge b-ala">ALA</span> kelp/coral/reefs</div>
+      </div>
+      <div class="sw on" id="sw-habitat"><div class="sw-k"></div></div>
+    </div>
+
+    <div class="layer-row" data-layer="species">
+      <div class="l-dot" style="background:#fd79a8"></div>
+      <div class="l-info">
+        <div class="l-name">Species Distribution</div>
+        <div class="l-src"><span class="api-badge b-ala">ALA</span> occurrence heatmap</div>
+      </div>
+      <div class="sw on" id="sw-species"><div class="sw-k"></div></div>
+    </div>
+  </div>
+
+  <!-- Species filter (multi-select dropdown) -->
+  <div class="p-section" id="species-filter-section">
+    <div class="species-filter-header" id="species-filter-toggle">
+      <div class="p-label" style="margin-bottom:0">Species</div>
+      <div class="species-filter-right">
+        <span id="species-filter-count">All 24</span>
+        <span id="species-filter-arrow">▾</span>
+      </div>
+    </div>
+    <div class="species-dropdown" id="species-dropdown">
+      <div class="species-dd-controls">
+        <button id="sp-all-btn">All</button>
+        <button id="sp-none-btn">None</button>
+      </div>
+      <div class="species-list">
+        <button class="species-btn" data-species="kingfish"       data-color="#00e5ff"><span class="sp-dot" style="background:#00e5ff"></span>Yellowtail Kingfish</button>
+        <button class="species-btn" data-species="mulloway"       data-color="#a29bfe"><span class="sp-dot" style="background:#a29bfe"></span>Mulloway</button>
+        <button class="species-btn" data-species="snapper"        data-color="#ff5f6d"><span class="sp-dot" style="background:#ff5f6d"></span>Snapper</button>
+        <button class="species-btn" data-species="mackerel"       data-color="#fdcb6e"><span class="sp-dot" style="background:#fdcb6e"></span>Spanish Mackerel</button>
+        <button class="species-btn" data-species="spotted-mack"   data-color="#ffe800"><span class="sp-dot" style="background:#ffe800"></span>Spotted Mackerel</button>
+        <button class="species-btn" data-species="mahi"           data-color="#55efc4"><span class="sp-dot" style="background:#55efc4"></span>Mahi-Mahi</button>
+        <button class="species-btn" data-species="yfin-tuna"      data-color="#ff9f43"><span class="sp-dot" style="background:#ff9f43"></span>Yellowfin Tuna</button>
+        <button class="species-btn" data-species="lt-tuna"        data-color="#ee5a24"><span class="sp-dot" style="background:#ee5a24"></span>Longtail Tuna</button>
+        <button class="species-btn" data-species="bonito"         data-color="#fd79a8"><span class="sp-dot" style="background:#fd79a8"></span>Bonito</button>
+        <button class="species-btn" data-species="luderick"       data-color="#5f27cd"><span class="sp-dot" style="background:#5f27cd"></span>Luderick</button>
+        <button class="species-btn" data-species="bream"          data-color="#d4e157"><span class="sp-dot" style="background:#d4e157"></span>Yellowfin Bream</button>
+        <button class="species-btn" data-species="rock-blackfish" data-color="#8395a7"><span class="sp-dot" style="background:#8395a7"></span>Rock Blackfish</button>
+        <button class="species-btn" data-species="silver-drummer" data-color="#c8d6e5"><span class="sp-dot" style="background:#c8d6e5"></span>Silver Drummer</button>
+        <button class="species-btn" data-species="morwong"        data-color="#e17055"><span class="sp-dot" style="background:#e17055"></span>Red Morwong</button>
+        <button class="species-btn" data-species="leatherjacket"  data-color="#1abc9c"><span class="sp-dot" style="background:#1abc9c"></span>Leatherjacket</button>
+        <button class="species-btn" data-species="salmon"         data-color="#c0392b"><span class="sp-dot" style="background:#c0392b"></span>Australian Salmon</button>
+        <button class="species-btn" data-species="flathead"       data-color="#ffb347"><span class="sp-dot" style="background:#ffb347"></span>Dusky Flathead</button>
+        <button class="species-btn" data-species="blue-flathead"  data-color="#3498db"><span class="sp-dot" style="background:#3498db"></span>Bluespotted Flathead</button>
+        <button class="species-btn" data-species="trevally"       data-color="#74b9ff"><span class="sp-dot" style="background:#74b9ff"></span>Silver Trevally</button>
+        <button class="species-btn" data-species="tarwhine"       data-color="#d7b8f3"><span class="sp-dot" style="background:#d7b8f3"></span>Tarwhine</button>
+        <button class="species-btn" data-species="wahoo"          data-color="#e91e63"><span class="sp-dot" style="background:#e91e63"></span>Wahoo</button>
+        <button class="species-btn" data-species="cobia"          data-color="#2ecc71"><span class="sp-dot" style="background:#2ecc71"></span>Cobia</button>
+        <button class="species-btn" data-species="tailor"         data-color="#aaff5e"><span class="sp-dot" style="background:#aaff5e"></span>Tailor</button>
+        <button class="species-btn" data-species="urchin"         data-color="#9b59b6"><span class="sp-dot" style="background:#9b59b6"></span>Sea Urchin</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── CLICK DRAWER (left side) ───────────────────────────────────────────── -->
+<div id="drawer">
+  <button id="d-close" title="Close">✕</button>
+  <div id="drawer-inner">
+    <div class="d-loc-row">
+      <div>
+        <div class="d-loc" id="d-loc">—</div>
+        <div class="d-coords" id="d-coords">—</div>
+      </div>
+      <button class="fav-btn" id="fav-btn" title="Save as favourite">☆</button>
+    </div>
+    <div id="d-body"></div>
+  </div>
+</div>
+
+<div id="hint">Click anywhere near water for live conditions</div>
+
+@section Scripts {
+  <script type="module" src="~/js/app.js"></script>
+}

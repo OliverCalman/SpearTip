@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>@ViewData["Title"] — SpearTips</title>
+
+  <!-- Leaflet 1.9 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+  <!-- Leaflet.heat — species distribution heatmaps -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="~/css/app.css" asp-append-version="true"/>
+</head>
+<body>
+  @RenderBody()
+  @await RenderSectionAsync("Scripts", required: false)
+
+  <!-- Cookie consent banner -->
+  <div id="cookie-banner">
+    <p class="cookie-text">
+      SpearTips uses a cookie to save your favourite dive spots between sessions.
+      No tracking or advertising data is collected.
+    </p>
+    <button id="cookie-accept" class="cookie-btn">Accept</button>
+  </div>
+  <script>
+    (function () {
+      var hasConsent = /(?:^|;\s*)speartips_consent=1/.test(document.cookie);
+      if (!hasConsent) document.getElementById('cookie-banner').classList.add('visible');
+      document.getElementById('cookie-accept').addEventListener('click', function () {
+        document.cookie = 'speartips_consent=1;max-age=31536000;path=/;SameSite=Lax';
+        document.getElementById('cookie-banner').classList.remove('visible');
+        window.dispatchEvent(new CustomEvent('speartips:consent'));
+      });
+    })();
+  </script>
+</body>
+</html>
