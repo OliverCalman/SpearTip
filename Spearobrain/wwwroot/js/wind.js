@@ -1,15 +1,14 @@
-// ── WIND PARTICLE SYSTEM ──────────────────────────────────────────────────────
-// Animated particle trails showing surface-wind direction and speed.
+// ── WIND VECTOR OVERLAY ────────────────────────────────────────────────────────
+// Animated arrows with tails over ocean only.
 // Architecture:
-//   • fetchAndStore()  — fetches Open-Meteo at a 4×3 coarse grid.
-//                        Ocean/land classification via Voronoi boundary.
-//                        Builds a pixel-space wind field (FIELD_COLS × FIELD_ROWS)
-//                        and ocean spawn points.  Called on moveend/zoomend.
-//   • animateFrame()   — rAF loop: fades canvas via destination-out each frame
-//                        (producing trails), then moves particles along the wind
-//                        field and draws them as small coloured dots.
-//                        Particles that drift off-screen or over land respawn
-//                        at a random ocean spawn point.
+//   • fetchAndStore()  — fetches Open-Meteo at a 6×4 coarse grid (padded 20%
+//                        beyond viewport for realistic edge data).  Ocean/land
+//                        classified via Voronoi boundary.  IDW-interpolated wind
+//                        stored in _currentPts.  High-wind zones (>15 kn) receive
+//                        extra display points at half the base step for denser coverage.
+//   • animateFrame()   — rAF loop: draws tail + shaft + arrowhead per point.
+//                        Tail length ∝ wind speed.  Travelling dot animates from
+//                        tail end to arrow tip, speed ∝ wind speed.
 import { CONFIG } from './config.js';
 
 let _map        = null;
@@ -19,32 +18,16 @@ let _visible    = true;
 let _fetchTimer = null;
 let _animFrame  = null;
 
-// Coarse fetch results — kept so the wind field can be rebuilt on resize
-let _oceanPts = [];   // { lat, lng, speed, dir }
-let _landPts  = [];
+let _currentPts = [];   // ocean display points with interpolated wind
 
-// Pixel-space wind field built from _oceanPts after each fetch / resize
-let _field    = null; // { cols, rows, vx, vy, spd, ocean } — Float32/Uint8 arrays
-
-// Screen-pixel centres of ocean mask cells — particle spawn positions
-let _spawnPts = [];
-
-// Live particles
-let _particles = [];
-
-// ── CONSTANTS ─────────────────────────────────────────────────────────────────
-
-const FIELD_COLS  = 40;
-const FIELD_ROWS  = 30;
-const SPEED_SCALE = 0.35;   // pixels per frame per knot at 60 fps
-const FADE_ALPHA  = 0.05;   // destination-out alpha per frame → ~0.5 s trails
-const MAX_AGE     = 220;    // frames before forced respawn (~3.7 s at 60 fps)
+// Per-point staggered animation phase: key → [0,1)
+const _phases = new Map();
 
 // Wind data cache (30 min): 'lat2_lng2' → { speed, dir, fetched }
 const _cache   = {};
 const CACHE_MS = 1_800_000;
 
-// Permanent land/ocean cache: 'lat2_lng2' → true (ocean) | false (land)
+// Permanent land/ocean cache (never expires)
 const _isOcean = {};
 
 const WIND_VARS = 'wind_speed_10m,wind_direction_10m';
@@ -86,7 +69,8 @@ function scheduleFetch() {
 async function fetchAndStore() {
   if (!_visible || !_map) return;
 
-  const coarseAll = buildGrid(4, 3);
+  // 6×4 = 24 coarse points over padded viewport for realistic edge coverage
+  const coarseAll = buildCoarseGrid(6, 4);
 
   const results = await Promise.allSettled(
     coarseAll.map(p => fetchWindAt(p.lat, p.lng))
@@ -105,96 +89,39 @@ async function fetchAndStore() {
 
   if (oceanPts.length === 0) return;
 
-  _oceanPts = oceanPts;
-  _landPts  = landPts;
+  // Base display grid step (degrees)
+  const zoom = _map.getZoom();
+  const step = zoom >= 15 ? 0.012
+             : zoom >= 13 ? 0.028
+             : zoom >= 11 ? 0.06
+             : 0.13;
 
-  buildWindField();
-  spawnParticles();
+  // Filter to ocean-only and IDW-interpolate
+  const basePts = buildDisplayGrid(step)
+    .filter(pt => isLikelyOcean(pt, oceanPts, landPts))
+    .map(pt => ({ lat: pt.lat, lng: pt.lng, ...interpolateWind(oceanPts, pt.lat, pt.lng) }));
 
-  if (_animFrame === null) animateFrame();
-}
-
-// ── WIND FIELD ────────────────────────────────────────────────────────────────
-
-function buildWindField() {
-  if (!_map || !_canvas) return;
-
-  const size = _map.getSize();
-  const W    = size.x;
-  const H    = size.y;
-  const cols = FIELD_COLS;
-  const rows = FIELD_ROWS;
-  const n    = cols * rows;
-
-  const vx    = new Float32Array(n);
-  const vy    = new Float32Array(n);
-  const spd   = new Float32Array(n);
-  const ocean = new Uint8Array(n);
-
-  const spawnPts = [];
-
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cx  = (c + 0.5) * W / cols;
-      const cy  = (r + 0.5) * H / rows;
-      const ll  = _map.containerPointToLatLng([cx, cy]);
-      const idx = r * cols + c;
-
-      if (!isLikelyOcean(ll, _oceanPts, _landPts)) continue;
-
-      ocean[idx] = 1;
-      const wind = interpolateWind(_oceanPts, ll.lat, ll.lng);
-      const toAngle = ((wind.dir + 180) % 360) * Math.PI / 180;
-      vx[idx]  =  Math.sin(toAngle) * wind.speed * SPEED_SCALE;
-      vy[idx]  = -Math.cos(toAngle) * wind.speed * SPEED_SCALE;
-      spd[idx] = wind.speed;
-      spawnPts.push({ x: cx, y: cy });
+  // Extra density in high-wind zones: insert midpoints around fast cells
+  const HIGH_WIND_KN = 15;
+  const half = step / 2;
+  const seen = new Set(basePts.map(p => ptKey(p)));
+  const extraPts = [];
+  for (const pt of basePts) {
+    if (pt.speed > HIGH_WIND_KN) {
+      for (const [dlat, dlng] of [[-half, 0], [half, 0], [0, -half], [0, half]]) {
+        const ep = { lat: pt.lat + dlat, lng: pt.lng + dlng };
+        const k  = ptKey(ep);
+        if (!seen.has(k) && isLikelyOcean(ep, oceanPts, landPts)) {
+          seen.add(k);
+          extraPts.push({ ...ep, ...interpolateWind(oceanPts, ep.lat, ep.lng) });
+        }
+      }
     }
   }
 
-  _field    = { cols, rows, W, H, vx, vy, spd, ocean };
-  _spawnPts = spawnPts;
-}
+  _currentPts = [...basePts, ...extraPts];
 
-// O(1) wind field lookup for a screen pixel position
-function fieldAt(x, y) {
-  if (!_field) return null;
-  const { cols, rows, W, H } = _field;
-  const c   = Math.min(Math.max(Math.floor(x * cols / W), 0), cols - 1);
-  const r   = Math.min(Math.max(Math.floor(y * rows / H), 0), rows - 1);
-  const idx = r * cols + c;
-  return { vx: _field.vx[idx], vy: _field.vy[idx], spd: _field.spd[idx], ocean: _field.ocean[idx] };
-}
-
-// ── PARTICLES ─────────────────────────────────────────────────────────────────
-
-function particleCount() {
-  if (!_map) return 400;
-  const z = _map.getZoom();
-  if (z >= 15) return 900;
-  if (z >= 13) return 650;
-  if (z >= 11) return 450;
-  return 300;
-}
-
-function spawnParticles() {
-  if (_spawnPts.length === 0) return;
-  const count = particleCount();
-  _particles  = Array.from({ length: count }, () =>
-    newParticle(Math.floor(Math.random() * MAX_AGE))  // stagger ages on init
-  );
-}
-
-function newParticle(age = 0) {
-  if (_spawnPts.length === 0) return { x: 0, y: 0, age: MAX_AGE };
-  const sp  = _spawnPts[Math.floor(Math.random() * _spawnPts.length)];
-  const cw  = _canvas ? _canvas.width  / FIELD_COLS : 0;
-  const ch  = _canvas ? _canvas.height / FIELD_ROWS : 0;
-  return {
-    x:   sp.x + (Math.random() - 0.5) * cw,
-    y:   sp.y + (Math.random() - 0.5) * ch,
-    age,
-  };
+  if (_animFrame === null) animateFrame();
 }
 
 // ── ANIMATION LOOP ────────────────────────────────────────────────────────────
@@ -206,77 +133,142 @@ function animateFrame() {
   if (_canvas.width !== size.x || _canvas.height !== size.y) {
     _canvas.width  = size.x;
     _canvas.height = size.y;
-    // Clear on resize and rebuild field so velocities match new pixel scale
-    if (_oceanPts.length) { buildWindField(); spawnParticles(); }
   }
 
-  const ctx = _ctx;
-  const W   = _canvas.width;
-  const H   = _canvas.height;
-
-  // ── Trail fade: erode existing pixels towards transparent ──────────────────
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = `rgba(0,0,0,${FADE_ALPHA})`;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'source-over';
-
-  // ── Update + draw particles ────────────────────────────────────────────────
-  if (_spawnPts.length > 0) {
-    ctx.save();
-
-    for (const p of _particles) {
-      const f = fieldAt(p.x, p.y);
-
-      // Respawn if stale, off-screen, or over land
-      if (
-        p.age >= MAX_AGE ||
-        p.x < 0 || p.x > W || p.y < 0 || p.y > H ||
-        !f || !f.ocean
-      ) {
-        const fresh = newParticle();
-        p.x   = fresh.x;
-        p.y   = fresh.y;
-        p.age = 0;
-        continue;   // don't draw on spawn frame (avoids flash)
-      }
-
-      p.x += f.vx;
-      p.y += f.vy;
-      p.age++;
-
-      // Fade in at birth, fade out near end of life
-      const life  = p.age / MAX_AGE;
-      const alpha = life < 0.08 ? life / 0.08
-                  : life > 0.75 ? (1 - life) / 0.25
-                  : 1;
-
-      ctx.globalAlpha = Math.max(0, alpha) * 0.88;
-      ctx.fillStyle   = windColor(f.spd);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.min(1.1 + f.spd * 0.06, 2.1), 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-
+  drawFrame(performance.now() / 1000);
   _animFrame = requestAnimationFrame(animateFrame);
 }
 
-// ── GRID BUILDER ──────────────────────────────────────────────────────────────
+function drawFrame(t) {
+  const ctx = _ctx;
+  const W   = _canvas.width;
+  const H   = _canvas.height;
+  ctx.clearRect(0, 0, W, H);
 
-function buildGrid(cols, rows) {
-  const b   = _map.getBounds();
+  for (const pt of _currentPts) {
+    const px = _map.latLngToContainerPoint([pt.lat, pt.lng]);
+    if (px.x < -80 || px.y < -80 || px.x > W + 80 || px.y > H + 80) continue;
+
+    const spd      = pt.speed;
+    const color    = windColor(spd);
+    const toAngle  = ((pt.dir + 180) % 360) * Math.PI / 180;
+    const ux       = Math.sin(toAngle);
+    const uy       = -Math.cos(toAngle);
+
+    const shaftLen = Math.min(8 + spd * 0.9, 24);
+    const tailLen  = Math.min(5 + spd * 2.0, 40);  // long tail = strong wind
+    const headLen  = Math.min(6 + spd * 0.30, 12);
+    const spread   = Math.PI / 4.5;
+    const arrAngle = Math.atan2(uy, ux);
+
+    // Animate the whole arrow sliding in the wind direction
+    const key  = ptKey(pt);
+    if (!_phases.has(key)) _phases.set(key, Math.random());
+    const phase     = _phases.get(key);
+    const rate      = Math.max(0.15, spd / 18);   // cycles/s — faster = stronger wind
+    const frac      = (t * rate + phase) % 1;
+    const travelPx  = Math.min(12 + spd * 2.5, 65);
+    const offset    = (frac - 0.5) * travelPx;    // moves ±half-travel from grid point
+
+    // Smooth fade in/out at cycle boundaries to avoid a hard jump
+    const life = frac < 0.08 ? frac / 0.08 : frac > 0.92 ? (1 - frac) / 0.08 : 1.0;
+
+    const cx  = px.x + ux * offset;
+    const cy  = px.y + uy * offset;
+    const sx0 = cx - ux * shaftLen / 2;
+    const sy0 = cy - uy * shaftLen / 2;
+    const sx1 = cx + ux * shaftLen / 2;
+    const sy1 = cy + uy * shaftLen / 2;
+    const tx0 = sx0 - ux * tailLen;
+    const ty0 = sy0 - uy * tailLen;
+
+    drawVector(ctx, tx0, ty0, sx0, sy0, sx1, sy1, ux, uy, arrAngle, headLen, spread, color, life);
+  }
+}
+
+// ── DRAWING ───────────────────────────────────────────────────────────────────
+
+function drawVector(ctx, tx0, ty0, sx0, sy0, sx1, sy1, ux, uy, angle, headLen, spread, color, alpha) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle   = color;
+  ctx.lineCap     = 'round';
+
+  // Tail: thin, faint — longer tail = stronger wind
+  ctx.lineWidth   = 0.9;
+  ctx.globalAlpha = 0.28 * alpha;
+  ctx.beginPath();
+  ctx.moveTo(tx0, ty0);
+  ctx.lineTo(sx0, sy0);
+  ctx.stroke();
+
+  // Shaft: stops short of tip to leave room for the head
+  ctx.lineWidth   = 1.3;
+  ctx.globalAlpha = 0.50 * alpha;
+  ctx.beginPath();
+  ctx.moveTo(sx0, sy0);
+  ctx.lineTo(sx1 - ux * headLen * 0.5, sy1 - uy * headLen * 0.5);
+  ctx.stroke();
+
+  // Arrowhead: solid filled triangle
+  ctx.globalAlpha = 0.72 * alpha;
+  ctx.beginPath();
+  ctx.moveTo(sx1, sy1);
+  ctx.lineTo(sx1 - headLen * Math.cos(angle - spread), sy1 - headLen * Math.sin(angle - spread));
+  ctx.lineTo(sx1 - headLen * Math.cos(angle + spread), sy1 - headLen * Math.sin(angle + spread));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ── GRID BUILDERS ─────────────────────────────────────────────────────────────
+
+// Coarse fetch grid: 20% padding beyond viewport for better edge accuracy
+function buildCoarseGrid(cols, rows) {
+  const b      = _map.getBounds();
+  const padLat = (b.getNorth() - b.getSouth()) * 0.20;
+  const padLng = (b.getEast()  - b.getWest())  * 0.20;
+  const south  = b.getSouth() - padLat;
+  const north  = b.getNorth() + padLat;
+  const west   = b.getWest()  - padLng;
+  const east   = b.getEast()  + padLng;
+
   const pts = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       pts.push({
-        lat: b.getSouth() + (b.getNorth() - b.getSouth()) * ((r + 0.5) / rows),
-        lng: b.getWest()  + (b.getEast()  - b.getWest())  * ((c + 0.5) / cols),
+        lat: south + (north - south) * ((r + 0.5) / rows),
+        lng: west  + (east  - west)  * ((c + 0.5) / cols),
       });
     }
   }
   return pts;
+}
+
+function buildDisplayGrid(step) {
+  const b   = _map.getBounds();
+  const pts = [];
+  for (let lat = b.getSouth() + step / 2; lat < b.getNorth(); lat += step) {
+    for (let lng = b.getWest() + step / 2; lng < b.getEast(); lng += step) {
+      pts.push({ lat, lng });
+    }
+  }
+  return pts;
+}
+
+// ── OCEAN MASK ────────────────────────────────────────────────────────────────
+
+function isLikelyOcean(pt, oceanPts, landPts) {
+  if (oceanPts.length === 0) return false;
+  const nearOcean = Math.min(...oceanPts.map(c => dist2(pt, c)));
+  if (landPts.length === 0)  return true;
+  const nearLand  = Math.min(...landPts.map(c => dist2(pt, c)));
+  return nearOcean <= nearLand;
+}
+
+function dist2(a, b) {
+  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -329,21 +321,13 @@ function interpolateWind(data, lat, lng) {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
-function isLikelyOcean(pt, oceanPts, landPts) {
-  if (oceanPts.length === 0) return false;
-  const nearOcean = Math.min(...oceanPts.map(c => dist2(pt, c)));
-  if (landPts.length === 0)  return true;
-  const nearLand  = Math.min(...landPts.map(c => dist2(pt, c)));
-  return nearOcean <= nearLand;
-}
-
-function dist2(a, b) {
-  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
-}
-
 function windColor(spd) {
   if (spd < 5)  return '#00e5ff';
   if (spd < 15) return '#b8d4e8';
   if (spd < 25) return '#ffb347';
   return '#ff5f6d';
+}
+
+function ptKey(pt) {
+  return `${pt.lat.toFixed(3)}_${pt.lng.toFixed(3)}`;
 }

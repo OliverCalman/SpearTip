@@ -151,6 +151,23 @@
 
 <div id="hint">Click anywhere near water for live conditions</div>
 
+<!-- ── INFO BUTTON ─────────────────────────────────────────────────────────── -->
+<div id="info-btn-wrap">
+  <div id="info-panel"><span id="info-text"></span></div>
+  <button id="info-btn" title="About">?</button>
+</div>
+
 @section Scripts {
   <script type="module" src="~/js/app.js"></script>
+  <script>
+    document.getElementById('info-text').textContent =
+      '\u00a9 ' + new Date().getFullYear() + ' Oliver Calman. Data sources are property of their respective owners.';
+    document.getElementById('info-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('info-panel').classList.toggle('open');
+    });
+    document.addEventListener('click', function() {
+      document.getElementById('info-panel').classList.remove('open');
+    });
+  </script>
 }

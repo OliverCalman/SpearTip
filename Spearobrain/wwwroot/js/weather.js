@@ -17,6 +17,7 @@ const MARINE_VARS = [
 const WEATHER_VARS = [
   'temperature_2m','relative_humidity_2m','apparent_temperature',
   'precipitation','cloud_cover','visibility','uv_index',
+  'wind_speed_10m','wind_direction_10m','wind_gusts_10m',
 ].join(',');
 
 // ── PUBLIC ────────────────────────────────────────────────────────────────────
@@ -54,6 +55,17 @@ async function fetchAllLocations() {
 async function fetchAndCacheLocation(loc) {
   try {
     const { marine, weather } = await fetchConditionsAt(loc.lat, loc.lng);
+    // Marine model omits wind for near-shore coords — fill from weather API.
+    const mc = marine?.current || {};
+    const wc = weather?.current || {};
+    if (marine) {
+      marine.current = {
+        ...mc,
+        wind_speed_10m:     mc.wind_speed_10m     ?? wc.wind_speed_10m,
+        wind_direction_10m: mc.wind_direction_10m  ?? wc.wind_direction_10m,
+        wind_gusts_10m:     mc.wind_gusts_10m      ?? wc.wind_gusts_10m,
+      };
+    }
     _data[loc.id] = { marine, weather };
   } catch { /* skip if unavailable */ }
 }

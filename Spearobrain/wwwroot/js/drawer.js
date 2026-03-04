@@ -14,6 +14,9 @@ let _curLat   = null;
 let _curLng   = null;
 let _curName  = null;
 
+// Permanent depth cache: '±lat2_±lng2' → metres (positive) | null
+const _depthCache = {};
+
 // ── PUBLIC ────────────────────────────────────────────────────────────────────
 
 export function initDrawer(map) {
@@ -65,17 +68,28 @@ function handleMapClick(lat, lng) {
 
 async function loadData(lat, lng, nameHint) {
   try {
-    // Parallel fetch: conditions + place name
-    const [{ marine, weather }, placeName] = await Promise.all([
+    // Parallel fetch: conditions + place name + bathymetric depth
+    const [{ marine, weather }, placeName, depth] = await Promise.all([
       fetchConditionsAt(lat, lng),
       nameHint || revGeo(lat, lng),
+      fetchDepth(lat, lng),
     ]);
 
     const name = nameHint || placeName || formatShortCoords(lat, lng);
     _curName   = name;
     document.getElementById('d-loc').textContent = name;
 
-    renderDrawer(lat, lng, marine?.current || {}, weather);
+    // Merge marine + weather current: marine wins where non-null, weather fills
+    // wind/gusts which the marine model often omits for near-shore locations.
+    const mc = marine?.current  || {};
+    const wc = weather?.current || {};
+    const mergedMarine = {
+      ...mc,
+      wind_speed_10m:     mc.wind_speed_10m     ?? wc.wind_speed_10m,
+      wind_direction_10m: mc.wind_direction_10m  ?? wc.wind_direction_10m,
+      wind_gusts_10m:     mc.wind_gusts_10m      ?? wc.wind_gusts_10m,
+    };
+    renderDrawer(lat, lng, mergedMarine, weather, depth);
     updateFavButton(lat, lng);
 
   } catch (err) {
@@ -92,7 +106,7 @@ async function loadData(lat, lng, nameHint) {
   }
 }
 
-function renderDrawer(lat, lng, marine, weather) {
+function renderDrawer(lat, lng, marine, weather, depth) {
   const species = getSpeciesLikelihood(lat, lng);
 
   // Detect nearest pre-prepared location for water quality
@@ -107,6 +121,9 @@ function renderDrawer(lat, lng, marine, weather) {
 
   // 3. Marine conditions (waves, swell, wetsuit rec)
   html += buildMarineSection(marine);
+
+  // 3b. Water depth (GEBCO bathymetry)
+  html += buildDepthSection(depth);
 
   // 4. Tide chart placeholder (populated after HTML is set in DOM)
   html += '<div id="__tide_section__"></div>';
@@ -329,6 +346,68 @@ function formatCoords(lat, lng) {
 
 function formatShortCoords(lat, lng) {
   return `${Math.abs(lat).toFixed(3)}°S, ${lng.toFixed(3)}°E`;
+}
+
+// ── DEPTH ─────────────────────────────────────────────────────────────────────
+
+// Fetch GEBCO bathymetric depth for a clicked ocean point.
+// Tries exact point first, then two nearby offshore offsets in one request.
+// Returns depth in metres (positive) or null.
+async function fetchDepth(lat, lng) {
+  const key = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+  if (key in _depthCache) return _depthCache[key];
+
+  try {
+    const pts = [
+      [lat,           lng         ],
+      [lat,           lng + 0.012 ],
+      [lat,           lng - 0.012 ],
+      [lat + 0.008,   lng         ],
+      [lat - 0.008,   lng         ],
+    ];
+    const locs = pts.map(([la, ln]) => `${la.toFixed(4)},${ln.toFixed(4)}`).join('|');
+    const resp = await fetch(`https://api.opentopodata.org/v1/gebco2020?locations=${locs}`);
+    if (!resp.ok) { _depthCache[key] = null; return null; }
+    const data = await resp.json();
+    for (const r of data.results || []) {
+      if (r.elevation != null && r.elevation < 0) {
+        const d = Math.round(-r.elevation);
+        _depthCache[key] = d;
+        return d;
+      }
+    }
+  } catch { /* no data */ }
+  _depthCache[key] = null;
+  return null;
+}
+
+function buildDepthSection(depth) {
+  if (depth == null) return '';
+
+  const label = depth < 5   ? 'Very shallow'
+              : depth < 20  ? 'Shallow'
+              : depth < 50  ? 'Moderate'
+              : depth < 200 ? 'Deep'
+              : 'Very deep';
+  const color = depth < 5   ? 'var(--amber)'
+              : depth < 20  ? 'var(--cyan)'
+              : depth < 200 ? '#4fc3f7'
+              : '#1a78c2';
+
+  return `<div class="d-section">
+    <div class="d-section-title">Water Depth
+      <span class="api-badge" style="background:rgba(79,195,247,.1);color:#4fc3f7;border:1px solid rgba(79,195,247,.25);margin-left:4px">GEBCO</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid rgba(79,195,247,.15);
+      border-radius:9px">
+      <div style="display:flex;align-items:baseline;gap:4px">
+        <span style="font-family:'Noto Sans',monospace;font-size:22px;color:${color};font-weight:600">~${depth}</span>
+        <span style="font-size:11px;color:var(--muted)">m</span>
+      </div>
+      <span style="font-size:11px;color:${color}">${label}</span>
+    </div>
+  </div>`;
 }
 
 function skeleton() {
