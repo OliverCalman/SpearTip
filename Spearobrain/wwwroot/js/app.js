@@ -12,6 +12,7 @@ import { initFavourites }        from './favourites.js';
 import { initDrawer, openAt }    from './drawer.js';
 import { initUI, buildCards }    from './ui.js';
 import { initClosuresLayer }     from './closures.js';
+import { initWindLayer }         from './wind.js';
 import { CONFIG }                from './config.js';
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
@@ -45,6 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 9. NSW spearfishing closure zones (ArcGIS NSW Aquatic Reserves)
   initClosuresLayer(map);
+
+  // 10. Wind vector canvas overlay
+  initWindLayer(map);
 
   // Rebuild cards once weather data has loaded
   setTimeout(() => buildCards(), 3000);

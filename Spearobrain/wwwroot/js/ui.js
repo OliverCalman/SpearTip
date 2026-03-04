@@ -2,7 +2,8 @@
 import { CONFIG, waveColor }                 from './config.js';
 import { setHabitatVisible }                 from './habitat.js';
 import { setSpeciesVisible }                 from './species.js';
-import { setClosuresVisible }               from './closures.js';
+import { setClosuresVisible, setNoTakeVisible } from './closures.js';
+import { setWindVisible }                   from './wind.js';
 import { openAt }                            from './drawer.js';
 import { getFavourites }                     from './favourites.js';
 import { getLocationData }                   from './weather.js';
@@ -14,12 +15,16 @@ const layerState = {
   habitat:  true,
   species:  true,
   closures: true,
+  notake:   true,
+  wind:     true,
 };
 
 const layerHandlers = {
   habitat:  v => setHabitatVisible(v),
   species:  v => setSpeciesVisible(v),
   closures: v => setClosuresVisible(v),
+  notake:   v => setNoTakeVisible(v),
+  wind:     v => setWindVisible(v),
 };
 
 // ── PUBLIC ────────────────────────────────────────────────────────────────────

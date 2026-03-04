@@ -113,9 +113,10 @@ function renderZones(pts, sp, source, centLat) {
     L.polygon(zone, {
       color:       sp.color,
       fillColor:   sp.color,
-      fillOpacity: Math.min(0.18 + cluster.length * 0.012, 0.42),
-      weight:      1.2,
-      opacity:     0.7,
+      fillOpacity: Math.min(0.12 + cluster.length * 0.008, 0.28),
+      weight:      1.5,
+      opacity:     0.8,
+      dashArray:   '5 4',
     })
     .bindPopup(popup, { className: 'tw-popup' })
     .addTo(_group);
@@ -239,7 +240,7 @@ function addKnownSites(bounds, centLat) {
     const popup = `<div style="font-family:'Noto Sans',monospace;font-size:11px;color:${sp.color};font-weight:600">${site.name}</div>
       <div style="font-size:10px;color:#3a5a78;margin-top:4px">${sp.name} — known site</div>`;
     const zone = buildZonePolygon(site.pts, centLat);
-    L.polygon(zone, { color: sp.color, fillColor: sp.color, fillOpacity: 0.22, weight: 1.2, opacity: 0.7 })
+    L.polygon(zone, { color: sp.color, fillColor: sp.color, fillOpacity: 0.15, weight: 1.5, opacity: 0.8, dashArray: '5 4' })
       .bindPopup(popup, { className: 'tw-popup' })
       .addTo(_group);
   });

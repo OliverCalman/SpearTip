@@ -61,7 +61,10 @@ async function fetchAndCacheLocation(loc) {
 async function fetchMarine(lat, lng) {
   const url  = `${CONFIG.api.openMeteoMarine}?latitude=${lat}&longitude=${lng}&current=${MARINE_VARS}&wind_speed_unit=kn`;
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Marine API ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.reason || `Marine API ${resp.status}`);
+  }
   return resp.json();
 }
 

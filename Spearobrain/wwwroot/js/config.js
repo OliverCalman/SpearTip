@@ -18,15 +18,15 @@ export const CONFIG = {
       note:       'Exposed ocean beach, good for pelagic species',
     },
     {
-      id:         'manly',
-      name:       'Manly Beach',
-      lat:        -33.7972,
-      lng:        151.2891,
-      waterLat:   -33.7972,
-      waterLng:   151.3000,
-      beachAngle: 75,
+      id:         'collaroy',
+      name:       'Collaroy Beach',
+      lat:        -33.7327,
+      lng:        151.3013,
+      waterLat:   -33.7327,
+      waterLng:   151.3140,
+      beachAngle: 90,
       tideRef:    'SYDNEY',
-      note:       'Rocky headlands, diverse reef habitat',
+      note:       'Long exposed beach, kingfish and snapper off the reef edge',
     },
     {
       id:         'malabar',
@@ -68,6 +68,9 @@ export const CONFIG = {
     { id:'cobia',          name:'Cobia',                scientific:'Rachycentron canadum',               color:'#2ecc71', alaName:'Rachycentron canadum' },
     { id:'tailor',         name:'Tailor',               scientific:'Pomatomus saltatrix',                color:'#aaff5e', alaName:'Pomatomus saltatrix' },
     { id:'urchin',         name:'Sea Urchin',           scientific:'Centrostephanus rodgersii',          color:'#9b59b6', alaName:'Centrostephanus rodgersii' },
+    { id:'red-urchin',    name:'Red Sea Urchin',       scientific:'Heliocidaris erythrogramma',         color:'#e84393', alaName:'Heliocidaris erythrogramma' },
+    { id:'rock-lobster',  name:'Eastern Rock Lobster',  scientific:'Sagmariasus verreauxi',              color:'#e67e22', alaName:'Sagmariasus verreauxi' },
+    { id:'slipper-crab',  name:'Balmain Bug',           scientific:'Ibacus peronii',                    color:'#d35400', alaName:'Ibacus peronii' },
   ],
 
   // Map tile providers

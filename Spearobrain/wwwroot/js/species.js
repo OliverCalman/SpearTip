@@ -1,21 +1,32 @@
 // ── SPECIES DISTRIBUTION LAYER ────────────────────────────────────────────────
 // Live occurrence data from Atlas of Living Australia (ALA) biocache API.
 // Visualised as per-species heatmaps using Leaflet.heat.
-// Density score derived solely from ALA occurrence record count within 20 km.
+// Density score derived solely from ALA occurrence record count within 5 km.
+// ALA data is fetched within a 200 km radius of the current map centre;
+// a new fetch fires when the user moves more than 150 km from the last centre.
 import { CONFIG } from './config.js';
 
 let _map           = null;
 let _heatLayers    = {};   // keyed by species id
-let _occurrences   = {};   // raw ALA occurrence cache
-let _activeSpecies = new Set(); // multi-select — all active by default
+let _occurrences   = {};   // raw ALA occurrence cache (merged across all fetches)
+let _activeSpecies = new Set();
 let _visible       = true;
+
+// Track which centres have been fetched to avoid redundant requests
+let _fetchedCenters = [];          // [{ lat, lng }]
+const REFETCH_KM    = 150;         // trigger new fetch if map moves this far
 
 // ── PUBLIC ────────────────────────────────────────────────────────────────────
 
 export function initSpeciesLayer(map) {
   _map = map;
-  fetchAllSpecies();
-  setInterval(fetchAllSpecies, 86_400_000);
+
+  // Initial fetch centred on Sydney
+  fetchAllSpeciesFor(-33.9, 151.2);
+  setInterval(() => {
+    const c = _map.getCenter();
+    maybeFetchForCenter(c.lat, c.lng);
+  }, 86_400_000); // re-check daily
 
   // All species active by default
   _activeSpecies = new Set(CONFIG.species.map(sp => sp.id));
@@ -28,7 +39,7 @@ export function initSpeciesLayer(map) {
     document.getElementById('species-filter-arrow')?.classList.toggle('open');
   });
 
-  // All / None quick-select (stop propagation so dropdown stays open)
+  // All / None quick-select
   document.getElementById('sp-all-btn')?.addEventListener('click', e => {
     e.stopPropagation();
     CONFIG.species.forEach(sp => _activeSpecies.add(sp.id));
@@ -48,15 +59,21 @@ export function initSpeciesLayer(map) {
   document.querySelectorAll('.species-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const sp = btn.dataset.species;
-      if (_activeSpecies.has(sp)) {
-        _activeSpecies.delete(sp);
-      } else {
-        _activeSpecies.add(sp);
-      }
+      if (_activeSpecies.has(sp)) _activeSpecies.delete(sp);
+      else                         _activeSpecies.add(sp);
       applyBtnState(btn);
       updateFilterCount();
       updateHeatLayers();
     });
+  });
+
+  // Heatmap click tooltip — fires before the drawer opens
+  map.on('click', e => showHeatmapTooltip(e.latlng.lat, e.latlng.lng));
+
+  // Refetch ALA data when the user pans far from last fetch centre
+  map.on('moveend', () => {
+    const c = map.getCenter();
+    maybeFetchForCenter(c.lat, c.lng);
   });
 }
 
@@ -96,38 +113,39 @@ export function setSpeciesVisible(on) {
 
 /**
  * Returns occurrence density for a given lat/lng point (used in drawer).
- * Score is purely the count of ALA records within 20 km, normalised to 0–1.
- * Returns array of { species, density (0-1), nearby (raw count) }
  */
 export function getSpeciesLikelihood(lat, lng) {
   return CONFIG.species.map(sp => {
     const occs   = _occurrences[sp.id] || [];
     const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 5).length;
-    return {
-      species: sp,
-      density: Math.min(nearby / 10, 1), // 10+ records within 5km = saturated
-      nearby,
-    };
+    return { species: sp, density: Math.min(nearby / 10, 1), nearby };
   });
 }
 
-// ── FETCH ─────────────────────────────────────────────────────────────────────
+// ── DYNAMIC FETCH ─────────────────────────────────────────────────────────────
 
-async function fetchAllSpecies() {
-  await Promise.allSettled(CONFIG.species.map(sp => fetchSpecies(sp)));
+function maybeFetchForCenter(lat, lng) {
+  const alreadyCovered = _fetchedCenters.some(
+    c => haversineKm(lat, lng, c.lat, c.lng) < REFETCH_KM
+  );
+  if (!alreadyCovered) fetchAllSpeciesFor(lat, lng);
 }
 
-async function fetchSpecies(sp) {
+async function fetchAllSpeciesFor(lat, lng) {
+  _fetchedCenters.push({ lat, lng });
+  await Promise.allSettled(CONFIG.species.map(sp => fetchSpecies(sp, lat, lng)));
+}
+
+async function fetchSpecies(sp, centerLat, centerLng) {
   try {
-    // Try ALA first (better Australian data)
     const alaUrl = `${CONFIG.api.ala}?q=${encodeURIComponent(sp.alaName)}` +
                    `&fq=country:Australia` +
-                   `&lat=-33.9&lon=151.2&radius=200` + // 200km radius around Sydney
+                   `&lat=${centerLat.toFixed(4)}&lon=${centerLng.toFixed(4)}&radius=200` +
                    `&pageSize=500&fl=decimalLatitude,decimalLongitude,month,year`;
-    const resp   = await fetch(alaUrl);
+    const resp = await fetch(alaUrl);
     if (resp.ok) {
-      const json  = await resp.json();
-      const occs  = (json.occurrences || [])
+      const json = await resp.json();
+      const newOccs = (json.occurrences || [])
         .filter(o => o.decimalLatitude && o.decimalLongitude)
         .map(o => ({
           lat:   parseFloat(o.decimalLatitude),
@@ -135,21 +153,19 @@ async function fetchSpecies(sp) {
           month: o.month ? parseInt(o.month) : null,
           year:  o.year  ? parseInt(o.year)  : null,
         }));
-      _occurrences[sp.id] = occs;
-      buildHeatLayer(sp, occs);
+      mergeOccurrences(sp.id, newOccs);
+      buildHeatLayer(sp, _occurrences[sp.id]);
       return;
     }
   } catch { /* fall through to GBIF */ }
 
   try {
-    // GBIF fallback
     const url  = `${CONFIG.api.gbif}?scientificName=${encodeURIComponent(sp.scientific)}` +
-                 `&country=AU&decimalLatitude=-36,-28&decimalLongitude=148,154` +
-                 `&hasCoordinate=true&limit=300`;
+                 `&country=AU&hasCoordinate=true&limit=300`;
     const resp = await fetch(url);
     if (!resp.ok) return;
     const json = await resp.json();
-    const occs = (json.results || [])
+    const newOccs = (json.results || [])
       .filter(o => o.decimalLatitude && o.decimalLongitude)
       .map(o => ({
         lat:   o.decimalLatitude,
@@ -157,38 +173,43 @@ async function fetchSpecies(sp) {
         month: o.month || null,
         year:  o.year  || null,
       }));
-    _occurrences[sp.id] = occs;
-    buildHeatLayer(sp, occs);
+    mergeOccurrences(sp.id, newOccs);
+    buildHeatLayer(sp, _occurrences[sp.id]);
   } catch { /* no data */ }
+}
+
+// Merge new occurrences into cache, deduplicating by rounded lat/lng
+function mergeOccurrences(spId, newOccs) {
+  const existing = _occurrences[spId] || [];
+  const seen = new Set(existing.map(o => `${o.lat.toFixed(3)}_${o.lng.toFixed(3)}`));
+  const added = newOccs.filter(o => {
+    const k = `${o.lat.toFixed(3)}_${o.lng.toFixed(3)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  _occurrences[spId] = [...existing, ...added];
 }
 
 // ── HEAT LAYER MANAGEMENT ─────────────────────────────────────────────────────
 
 function buildHeatLayer(sp, occs) {
-  // Remove old layer if present
-  if (_heatLayers[sp.id]) {
-    _map.removeLayer(_heatLayers[sp.id]);
-  }
+  if (_heatLayers[sp.id]) _map.removeLayer(_heatLayers[sp.id]);
+  if (!occs || occs.length === 0) return;
 
-  if (occs.length === 0) return;
-
-  // Weight recent records higher
-  const now   = new Date().getFullYear();
+  const now    = new Date().getFullYear();
   const points = occs.map(o => {
     const age    = o.year ? now - o.year : 10;
-    const weight = Math.max(0.2, 1 - age * 0.04); // 0.2 min for old records
+    const weight = Math.max(0.2, 1 - age * 0.04);
     return [o.lat, o.lng, weight];
   });
 
-  // Leaflet.heat options tuned per species movement patterns
-  const heatOptions = {
-    radius:  sp.id === 'flathead' ? 8 : 14,  // flathead more localised
+  _heatLayers[sp.id] = L.heatLayer(points, {
+    radius:  sp.id === 'flathead' ? 8 : 14,
     blur:    18,
     maxZoom: 14,
     gradient: buildGradient(sp.color),
-  };
-
-  _heatLayers[sp.id] = L.heatLayer(points, heatOptions);
+  });
 
   if (_visible && _activeSpecies.has(sp.id)) {
     _heatLayers[sp.id].addTo(_map);
@@ -199,7 +220,6 @@ function updateHeatLayers() {
   CONFIG.species.forEach(sp => {
     const layer = _heatLayers[sp.id];
     if (!layer) return;
-
     if (_visible && _activeSpecies.has(sp.id)) {
       if (!_map.hasLayer(layer)) layer.addTo(_map);
     } else {
@@ -208,9 +228,7 @@ function updateHeatLayers() {
   });
 }
 
-// Build a Leaflet.heat gradient that goes from transparent → species colour
 function buildGradient(hexColor) {
-  // Convert hex to rgba components
   const r = parseInt(hexColor.slice(1, 3), 16);
   const g = parseInt(hexColor.slice(3, 5), 16);
   const b = parseInt(hexColor.slice(5, 7), 16);
@@ -220,6 +238,49 @@ function buildGradient(hexColor) {
     0.6: `rgba(${r},${g},${b},0.55)`,
     1.0: `rgba(${r},${g},${b},0.85)`,
   };
+}
+
+// ── HEATMAP CLICK TOOLTIP ─────────────────────────────────────────────────────
+
+function densityLabel(count) {
+  if (count >= 15) return 'Plentiful';
+  if (count >= 5)  return 'Common';
+  if (count >= 1)  return 'Rare';
+  return null;
+}
+
+function showHeatmapTooltip(lat, lng) {
+  // Find active species with records nearby
+  const hits = CONFIG.species
+    .filter(sp => _activeSpecies.has(sp.id))
+    .map(sp => {
+      const occs   = _occurrences[sp.id] || [];
+      const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 5).length;
+      return { sp, nearby, label: densityLabel(nearby) };
+    })
+    .filter(h => h.label !== null)
+    .sort((a, b) => b.nearby - a.nearby)
+    .slice(0, 5); // top 5 species
+
+  if (hits.length === 0) return;
+
+  const rows = hits.map(h =>
+    `<div style="display:flex;align-items:center;gap:7px;padding:3px 0">
+      <div style="width:7px;height:7px;border-radius:50%;background:${h.sp.color};flex-shrink:0"></div>
+      <span style="font-size:11px;color:#b8d4e8;flex:1">${h.sp.name}</span>
+      <span style="font-size:10px;color:${h.sp.color};font-weight:600;white-space:nowrap">${h.label}</span>
+    </div>`
+  ).join('');
+
+  L.popup({ className: 'tw-popup', maxWidth: 220, autoPan: false })
+    .setLatLng([lat, lng])
+    .setContent(
+      `<div style="font-family:'Noto Sans',monospace">
+        <div style="font-size:10px;color:#3a5a78;margin-bottom:6px;letter-spacing:.5px">SPECIES WITHIN 5 KM</div>
+        ${rows}
+      </div>`
+    )
+    .openOn(_map);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────

@@ -79,6 +79,11 @@ async function loadData(lat, lng, nameHint) {
     updateFavButton(lat, lng);
 
   } catch (err) {
+    // Open-Meteo Marine returns this reason for inland points — close silently
+    if (err.message?.includes('No data is available')) {
+      close();
+      return;
+    }
     document.getElementById('d-body').innerHTML = `
       <p style="color:var(--coral);font-size:12px;padding:8px 0">
         Unable to fetch data for this location.<br>

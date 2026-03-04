@@ -10,8 +10,8 @@
 <div id="left-col">
   <div id="search-wrap">
     <input id="search-input" type="text" placeholder="Search location…" autocomplete="off">
-    <div id="search-results"></div>
   </div>
+  <div id="search-results"></div>
   <div class="left-col-label">Popular Spots</div>
   <div id="cards-bar"></div>
   <div class="left-col-label" id="favs-label" style="display:none">Favourites</div>
@@ -43,10 +43,19 @@
     <div class="layer-row" data-layer="closures">
       <div class="l-dot" style="background:#ff5f6d"></div>
       <div class="l-info">
-        <div class="l-name">Closure Zones</div>
+        <div class="l-name">No Spearfishing Zones</div>
         <div class="l-src"><span class="api-badge b-nsw">NSW DPI</span> aquatic reserves</div>
       </div>
       <div class="sw on" id="sw-closures"><div class="sw-k"></div></div>
+    </div>
+
+    <div class="layer-row" data-layer="notake">
+      <div class="l-dot" style="background:#ff69b4"></div>
+      <div class="l-info">
+        <div class="l-name">No Take Zones</div>
+        <div class="l-src"><span class="api-badge b-nsw">NSW DPI</span> sanctuary zones</div>
+      </div>
+      <div class="sw on" id="sw-notake"><div class="sw-k"></div></div>
     </div>
 
     <div class="layer-row" data-layer="habitat">
@@ -56,6 +65,15 @@
         <div class="l-src"><span class="api-badge b-ala">ALA</span> kelp/coral/reefs</div>
       </div>
       <div class="sw on" id="sw-habitat"><div class="sw-k"></div></div>
+    </div>
+
+    <div class="layer-row" data-layer="wind">
+      <div class="l-dot" style="background:#74b9ff"></div>
+      <div class="l-info">
+        <div class="l-name">Wind Vectors</div>
+        <div class="l-src"><span class="api-badge b-om">OPEN-METEO</span> live surface wind</div>
+      </div>
+      <div class="sw on" id="sw-wind"><div class="sw-k"></div></div>
     </div>
 
     <div class="layer-row" data-layer="species">
@@ -73,7 +91,7 @@
     <div class="species-filter-header" id="species-filter-toggle">
       <div class="p-label" style="margin-bottom:0">Species</div>
       <div class="species-filter-right">
-        <span id="species-filter-count">All 24</span>
+        <span id="species-filter-count">All 27</span>
         <span id="species-filter-arrow">▾</span>
       </div>
     </div>
@@ -107,6 +125,9 @@
         <button class="species-btn" data-species="cobia"          data-color="#2ecc71"><span class="sp-dot" style="background:#2ecc71"></span>Cobia</button>
         <button class="species-btn" data-species="tailor"         data-color="#aaff5e"><span class="sp-dot" style="background:#aaff5e"></span>Tailor</button>
         <button class="species-btn" data-species="urchin"         data-color="#9b59b6"><span class="sp-dot" style="background:#9b59b6"></span>Sea Urchin</button>
+        <button class="species-btn" data-species="red-urchin"     data-color="#e84393"><span class="sp-dot" style="background:#e84393"></span>Red Sea Urchin</button>
+        <button class="species-btn" data-species="rock-lobster"   data-color="#e67e22"><span class="sp-dot" style="background:#e67e22"></span>Eastern Rock Lobster</button>
+        <button class="species-btn" data-species="slipper-crab"   data-color="#d35400"><span class="sp-dot" style="background:#d35400"></span>Balmain Bug</button>
       </div>
     </div>
   </div>
