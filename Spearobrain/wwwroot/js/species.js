@@ -117,7 +117,7 @@ export function setSpeciesVisible(on) {
 export function getSpeciesLikelihood(lat, lng) {
   return CONFIG.species.map(sp => {
     const occs   = _occurrences[sp.id] || [];
-    const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 5).length;
+    const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 2).length;
     return { species: sp, density: Math.min(nearby / 10, 1), nearby };
   });
 }
@@ -255,7 +255,7 @@ function showHeatmapTooltip(lat, lng) {
     .filter(sp => _activeSpecies.has(sp.id))
     .map(sp => {
       const occs   = _occurrences[sp.id] || [];
-      const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 5).length;
+      const nearby = occs.filter(o => haversineKm(lat, lng, o.lat, o.lng) < 2).length;
       return { sp, nearby, label: densityLabel(nearby) };
     })
     .filter(h => h.label !== null)
