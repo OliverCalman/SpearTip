@@ -1,0 +1,31 @@
+version: 0.2
+
+env:
+  variables:
+    DOTNET_INSTALL_DIR: /root/.dotnet
+
+phases:
+  install:
+    commands:
+      # Install .NET 9 (not yet in all standard CodeBuild images)
+      - curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir $DOTNET_INSTALL_DIR
+      - export PATH="$DOTNET_INSTALL_DIR:$PATH"
+      - dotnet --version
+
+  build:
+    commands:
+      - export PATH="$DOTNET_INSTALL_DIR:$PATH"
+      - dotnet publish Spearobrain/Spearobrain.csproj -c Release -o ./publish
+
+  post_build:
+    commands:
+      - export PATH="$DOTNET_INSTALL_DIR:$PATH"
+      # Include the Procfile in the deployment package so EB knows how to start the app
+      - cp Procfile ./publish/Procfile
+      # Zip publish output — this is what gets deployed to Elastic Beanstalk
+      - cd publish && zip -r ../deploy.zip . && cd ..
+
+artifacts:
+  files:
+    - deploy.zip
+  discard-paths: yes
