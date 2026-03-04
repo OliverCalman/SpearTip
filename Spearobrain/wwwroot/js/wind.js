@@ -1,16 +1,15 @@
-// ── WIND VECTOR OVERLAY ────────────────────────────────────────────────────────
-// Animated surface-wind lines on a canvas overlay.
+// ── WIND PARTICLE SYSTEM ──────────────────────────────────────────────────────
+// Animated particle trails showing surface-wind direction and speed.
 // Architecture:
 //   • fetchAndStore()  — fetches Open-Meteo at a 4×3 coarse grid.
-//                        Coarse points that return null are land; those that
-//                        return data are ocean.  Display grid points are only
-//                        kept if their nearest ocean coarse point is closer
-//                        than their nearest land coarse point (Voronoi land mask).
-//                        Remaining points are IDW-interpolated and stored in
-//                        _currentPts.  Called on moveend/zoomend (debounced).
-//   • animateFrame()   — rAF loop: draws a static line + a travelling dot per
-//                        point.  Dot speed is proportional to wind speed so
-//                        direction and strength are both visible.
+//                        Ocean/land classification via Voronoi boundary.
+//                        Builds a pixel-space wind field (FIELD_COLS × FIELD_ROWS)
+//                        and ocean spawn points.  Called on moveend/zoomend.
+//   • animateFrame()   — rAF loop: fades canvas via destination-out each frame
+//                        (producing trails), then moves particles along the wind
+//                        field and draws them as small coloured dots.
+//                        Particles that drift off-screen or over land respawn
+//                        at a random ocean spawn point.
 import { CONFIG } from './config.js';
 
 let _map        = null;
@@ -20,17 +19,32 @@ let _visible    = true;
 let _fetchTimer = null;
 let _animFrame  = null;
 
-let _currentPts = [];   // ocean display points with interpolated wind data
+// Coarse fetch results — kept so the wind field can be rebuilt on resize
+let _oceanPts = [];   // { lat, lng, speed, dir }
+let _landPts  = [];
 
-// Per-point staggered phase: key → [0,1)
-const _phases  = new Map();
+// Pixel-space wind field built from _oceanPts after each fetch / resize
+let _field    = null; // { cols, rows, vx, vy, spd, ocean } — Float32/Uint8 arrays
+
+// Screen-pixel centres of ocean mask cells — particle spawn positions
+let _spawnPts = [];
+
+// Live particles
+let _particles = [];
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+
+const FIELD_COLS  = 40;
+const FIELD_ROWS  = 30;
+const SPEED_SCALE = 0.35;   // pixels per frame per knot at 60 fps
+const FADE_ALPHA  = 0.05;   // destination-out alpha per frame → ~0.5 s trails
+const MAX_AGE     = 220;    // frames before forced respawn (~3.7 s at 60 fps)
 
 // Wind data cache (30 min): 'lat2_lng2' → { speed, dir, fetched }
 const _cache   = {};
 const CACHE_MS = 1_800_000;
 
 // Permanent land/ocean cache: 'lat2_lng2' → true (ocean) | false (land)
-// Land/ocean status never changes so no expiry.
 const _isOcean = {};
 
 const WIND_VARS = 'wind_speed_10m,wind_direction_10m';
@@ -74,7 +88,6 @@ async function fetchAndStore() {
 
   const coarseAll = buildGrid(4, 3);
 
-  // Fetch all coarse points, separating ocean from land
   const results = await Promise.allSettled(
     coarseAll.map(p => fetchWindAt(p.lat, p.lng))
   );
@@ -92,31 +105,96 @@ async function fetchAndStore() {
 
   if (oceanPts.length === 0) return;
 
-  // Build display grid, keeping only points that are likely over water
-  const displayPts = buildDisplayGrid()
-    .filter(pt => isLikelyOcean(pt, oceanPts, landPts));
+  _oceanPts = oceanPts;
+  _landPts  = landPts;
 
-  _currentPts = displayPts.map(pt => ({
-    lat: pt.lat,
-    lng: pt.lng,
-    ...interpolateWind(oceanPts, pt.lat, pt.lng),
-  }));
+  buildWindField();
+  spawnParticles();
 
   if (_animFrame === null) animateFrame();
 }
 
-// A display point is considered ocean when its nearest ocean coarse point
-// is closer than its nearest land coarse point (Voronoi boundary).
-function isLikelyOcean(pt, oceanPts, landPts) {
-  if (oceanPts.length === 0) return false;
-  const nearOcean = Math.min(...oceanPts.map(c => dist2(pt, c)));
-  if (landPts.length === 0)  return true;
-  const nearLand  = Math.min(...landPts.map(c => dist2(pt, c)));
-  return nearOcean <= nearLand;
+// ── WIND FIELD ────────────────────────────────────────────────────────────────
+
+function buildWindField() {
+  if (!_map || !_canvas) return;
+
+  const size = _map.getSize();
+  const W    = size.x;
+  const H    = size.y;
+  const cols = FIELD_COLS;
+  const rows = FIELD_ROWS;
+  const n    = cols * rows;
+
+  const vx    = new Float32Array(n);
+  const vy    = new Float32Array(n);
+  const spd   = new Float32Array(n);
+  const ocean = new Uint8Array(n);
+
+  const spawnPts = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx  = (c + 0.5) * W / cols;
+      const cy  = (r + 0.5) * H / rows;
+      const ll  = _map.containerPointToLatLng([cx, cy]);
+      const idx = r * cols + c;
+
+      if (!isLikelyOcean(ll, _oceanPts, _landPts)) continue;
+
+      ocean[idx] = 1;
+      const wind = interpolateWind(_oceanPts, ll.lat, ll.lng);
+      const toAngle = ((wind.dir + 180) % 360) * Math.PI / 180;
+      vx[idx]  =  Math.sin(toAngle) * wind.speed * SPEED_SCALE;
+      vy[idx]  = -Math.cos(toAngle) * wind.speed * SPEED_SCALE;
+      spd[idx] = wind.speed;
+      spawnPts.push({ x: cx, y: cy });
+    }
+  }
+
+  _field    = { cols, rows, W, H, vx, vy, spd, ocean };
+  _spawnPts = spawnPts;
 }
 
-function dist2(a, b) {
-  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
+// O(1) wind field lookup for a screen pixel position
+function fieldAt(x, y) {
+  if (!_field) return null;
+  const { cols, rows, W, H } = _field;
+  const c   = Math.min(Math.max(Math.floor(x * cols / W), 0), cols - 1);
+  const r   = Math.min(Math.max(Math.floor(y * rows / H), 0), rows - 1);
+  const idx = r * cols + c;
+  return { vx: _field.vx[idx], vy: _field.vy[idx], spd: _field.spd[idx], ocean: _field.ocean[idx] };
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────────────────────
+
+function particleCount() {
+  if (!_map) return 400;
+  const z = _map.getZoom();
+  if (z >= 15) return 900;
+  if (z >= 13) return 650;
+  if (z >= 11) return 450;
+  return 300;
+}
+
+function spawnParticles() {
+  if (_spawnPts.length === 0) return;
+  const count = particleCount();
+  _particles  = Array.from({ length: count }, () =>
+    newParticle(Math.floor(Math.random() * MAX_AGE))  // stagger ages on init
+  );
+}
+
+function newParticle(age = 0) {
+  if (_spawnPts.length === 0) return { x: 0, y: 0, age: MAX_AGE };
+  const sp  = _spawnPts[Math.floor(Math.random() * _spawnPts.length)];
+  const cw  = _canvas ? _canvas.width  / FIELD_COLS : 0;
+  const ch  = _canvas ? _canvas.height / FIELD_ROWS : 0;
+  return {
+    x:   sp.x + (Math.random() - 0.5) * cw,
+    y:   sp.y + (Math.random() - 0.5) * ch,
+    age,
+  };
 }
 
 // ── ANIMATION LOOP ────────────────────────────────────────────────────────────
@@ -128,53 +206,64 @@ function animateFrame() {
   if (_canvas.width !== size.x || _canvas.height !== size.y) {
     _canvas.width  = size.x;
     _canvas.height = size.y;
+    // Clear on resize and rebuild field so velocities match new pixel scale
+    if (_oceanPts.length) { buildWindField(); spawnParticles(); }
   }
 
-  drawFrame(performance.now() / 1000);
+  const ctx = _ctx;
+  const W   = _canvas.width;
+  const H   = _canvas.height;
+
+  // ── Trail fade: erode existing pixels towards transparent ──────────────────
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = `rgba(0,0,0,${FADE_ALPHA})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // ── Update + draw particles ────────────────────────────────────────────────
+  if (_spawnPts.length > 0) {
+    ctx.save();
+
+    for (const p of _particles) {
+      const f = fieldAt(p.x, p.y);
+
+      // Respawn if stale, off-screen, or over land
+      if (
+        p.age >= MAX_AGE ||
+        p.x < 0 || p.x > W || p.y < 0 || p.y > H ||
+        !f || !f.ocean
+      ) {
+        const fresh = newParticle();
+        p.x   = fresh.x;
+        p.y   = fresh.y;
+        p.age = 0;
+        continue;   // don't draw on spawn frame (avoids flash)
+      }
+
+      p.x += f.vx;
+      p.y += f.vy;
+      p.age++;
+
+      // Fade in at birth, fade out near end of life
+      const life  = p.age / MAX_AGE;
+      const alpha = life < 0.08 ? life / 0.08
+                  : life > 0.75 ? (1 - life) / 0.25
+                  : 1;
+
+      ctx.globalAlpha = Math.max(0, alpha) * 0.88;
+      ctx.fillStyle   = windColor(f.spd);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.min(1.1 + f.spd * 0.06, 2.1), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   _animFrame = requestAnimationFrame(animateFrame);
 }
 
-function drawFrame(t) {
-  const ctx = _ctx;
-  ctx.clearRect(0, 0, _canvas.width, _canvas.height);
-
-  for (const pt of _currentPts) {
-    const px = _map.latLngToContainerPoint([pt.lat, pt.lng]);
-    if (px.x < -30 || px.y < -30 ||
-        px.x > _canvas.width + 30 || px.y > _canvas.height + 30) continue;
-
-    const spd      = pt.speed;
-    const color    = windColor(spd);
-    const len      = Math.min(4 + spd * 1.6, 28);
-    const toAngle  = ((pt.dir + 180) % 360) * Math.PI / 180;
-    const dx       = Math.sin(toAngle) * len;
-    const dy       = -Math.cos(toAngle) * len;
-
-    // Static line (no arrowhead)
-    drawLine(ctx, px.x, px.y, dx, dy, color);
-
-    // Travelling dot along the line (direction + speed indicator)
-    const key   = ptKey(pt);
-    if (!_phases.has(key)) _phases.set(key, Math.random());
-    const phase = _phases.get(key);
-    const rate  = Math.max(0.25, spd / 12);
-    const frac  = (t * rate + phase) % 1;
-
-    const dotX = (px.x - dx / 2) + dx * frac;
-    const dotY = (px.y - dy / 2) + dy * frac;
-    const dotR = Math.min(1.6 + spd * 0.07, 2.8);
-
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle   = color;
-    ctx.beginPath();
-    ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-// ── GRID BUILDERS ─────────────────────────────────────────────────────────────
+// ── GRID BUILDER ──────────────────────────────────────────────────────────────
 
 function buildGrid(cols, rows) {
   const b   = _map.getBounds();
@@ -190,29 +279,11 @@ function buildGrid(cols, rows) {
   return pts;
 }
 
-function buildDisplayGrid() {
-  const zoom = _map.getZoom();
-  const step = zoom >= 15 ? 0.012
-             : zoom >= 13 ? 0.030
-             : zoom >= 11 ? 0.065
-             : 0.13;
-
-  const b   = _map.getBounds();
-  const pts = [];
-  for (let lat = b.getSouth() + step / 2; lat < b.getNorth(); lat += step) {
-    for (let lng = b.getWest() + step / 2; lng < b.getEast(); lng += step) {
-      pts.push({ lat, lng });
-    }
-  }
-  return pts;
-}
-
 // ── API ───────────────────────────────────────────────────────────────────────
 
 async function fetchWindAt(lat, lng) {
   const key = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
-  // Permanent land cache: if we already know this point is land, skip fetch
   if (_isOcean[key] === false) return null;
 
   if (_cache[key] && Date.now() - _cache[key].fetched < CACHE_MS) {
@@ -225,7 +296,7 @@ async function fetchWindAt(lat, lng) {
       `&current=${WIND_VARS}&wind_speed_unit=kn`;
     const resp = await fetch(url);
     if (!resp.ok) {
-      _isOcean[key] = false; // land — remember permanently
+      _isOcean[key] = false;
       return null;
     }
     const d     = await resp.json();
@@ -256,31 +327,23 @@ function interpolateWind(data, lat, lng) {
   };
 }
 
-// ── DRAWING ───────────────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 
-function drawLine(ctx, x, y, dx, dy, color) {
-  const tx0 = x - dx / 2, ty0 = y - dy / 2;
-  const tx1 = x + dx / 2, ty1 = y + dy / 2;
+function isLikelyOcean(pt, oceanPts, landPts) {
+  if (oceanPts.length === 0) return false;
+  const nearOcean = Math.min(...oceanPts.map(c => dist2(pt, c)));
+  if (landPts.length === 0)  return true;
+  const nearLand  = Math.min(...landPts.map(c => dist2(pt, c)));
+  return nearOcean <= nearLand;
+}
 
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth   = 1.0;
-  ctx.globalAlpha = 0.42;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(tx0, ty0);
-  ctx.lineTo(tx1, ty1);
-  ctx.stroke();
-  ctx.restore();
+function dist2(a, b) {
+  return Math.hypot(a.lat - b.lat, a.lng - b.lng);
 }
 
 function windColor(spd) {
-  if (spd < 5)  return 'rgba(0,229,255,1)';
-  if (spd < 15) return 'rgba(184,212,232,1)';
-  if (spd < 25) return 'rgba(255,179,71,1)';
-  return 'rgba(255,95,109,1)';
-}
-
-function ptKey(pt) {
-  return `${pt.lat.toFixed(3)}_${pt.lng.toFixed(3)}`;
+  if (spd < 5)  return '#00e5ff';
+  if (spd < 15) return '#b8d4e8';
+  if (spd < 25) return '#ffb347';
+  return '#ff5f6d';
 }
