@@ -186,7 +186,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--ink); fo
 .sw.on  .sw-k { left:19px; }
 .sw.off .sw-k { left:3px; }
 
-/* Species filter — collapsible dropdown */
+/* Species filter - collapsible dropdown */
 .species-filter-header {
   display:flex; align-items:center; justify-content:space-between;
   cursor:pointer; padding:3px 0; user-select:none;
@@ -390,26 +390,28 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--ink); fo
 #info-btn {
   flex-shrink:0; width:32px; height:32px; border-radius:50%;
   background:var(--glass); border:1px solid var(--bdr);
-  color:var(--muted); font-size:14px; font-weight:700;
+  color:var(--text); font-size:14px; font-weight:700;
   cursor:pointer; display:flex; align-items:center; justify-content:center;
   backdrop-filter:blur(20px); transition:color .2s, border-color .2s;
   font-family:'Noto Sans',monospace;
 }
 #info-btn:hover { color:var(--cyan); border-color:var(--cyan); }
 #info-panel {
-  background:var(--glass); border:1px solid var(--bdr); border-radius:20px;
-  backdrop-filter:blur(20px); white-space:nowrap; overflow:hidden;
+  background:var(--glass); border:1px solid var(--bdr); border-radius:30px;
+  backdrop-filter:blur(12px); white-space:nowrap; overflow:hidden;
   max-width:0; opacity:0; padding:0;
   transition:max-width .35s ease, opacity .25s ease, padding .35s ease;
   pointer-events:none;
 }
-#info-panel.open { max-width:420px; opacity:1; padding:6px 14px; pointer-events:auto; }
+#info-panel.open { max-width:calc(100vw - 90px); opacity:1; padding:7px 18px; pointer-events:auto; }
 #info-text {
-  font-family:'Noto Sans',monospace; font-size:10px;
-  color:var(--muted); letter-spacing:.3px; line-height:1.5;
+  font-family:'Noto Sans',monospace; font-size:12px;
+  color:var(--text); letter-spacing:.3px; line-height:1.5;
 }
+#info-text a { color:var(--cyan); text-decoration:none; }
+#info-text a:hover { text-decoration:underline; }
 
-/* Leaflet overrides — push zoom controls clear of the left column */
+/* Leaflet overrides - push zoom controls clear of the left column */
 .leaflet-left { left:calc(var(--col-w) + 30px) !important; }
 .leaflet-control-zoom a {
   background:var(--glass)!important; color:var(--text)!important;

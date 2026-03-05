@@ -1,5 +1,5 @@
 // ── WATER QUALITY (Rainfall-based turbidity assessment) ───────────────────────
-// Uses Open-Meteo daily precipitation sum for the past 24 h — no proxy needed.
+// Uses Open-Meteo daily precipitation sum for the past 24 h - no proxy needed.
 // Heavy rain flushes stormwater, bacteria and silt into coastal waters.
 // This is the most reliable real-time proxy without a backend data source.
 import { CONFIG } from './config.js';
@@ -10,9 +10,9 @@ let _cache = {};  // { locId: { status, label, color, note, rainfall24h, fetched
 
 const THRESHOLDS = [
   { mm: 30, status: 'POOR',    label: 'Poor',
-    note: 'Heavy rain — high stormwater runoff. Bacteria & turbidity risk elevated. Avoid entering water near drains.' },
+    note: 'Heavy rain - high stormwater runoff. Bacteria & turbidity risk elevated. Avoid entering water near drains.' },
   { mm: 8,  status: 'CAUTION', label: 'Caution',
-    note: 'Moderate rainfall — elevated turbidity likely. Conditions typically improve 24–48 h after rain.' },
+    note: 'Moderate rainfall - elevated turbidity likely. Conditions typically improve 24–48 h after rain.' },
   { mm: 0,  status: 'GOOD',    label: 'Good',
     note: 'No significant recent rainfall. Water clarity likely good.' },
 ];
@@ -45,7 +45,7 @@ async function fetchForLocation(loc) {
 
   try {
     // Open-Meteo: daily precipitation_sum for the past 1 day.
-    // No API key, CORS-enabled — direct browser fetch, no backend proxy needed.
+    // No API key, CORS-enabled - direct browser fetch, no backend proxy needed.
     const url = `${CONFIG.api.openMeteoWeather}` +
       `?latitude=${loc.lat.toFixed(4)}&longitude=${loc.lng.toFixed(4)}` +
       `&daily=precipitation_sum&past_days=1&forecast_days=0&timezone=Australia%2FSydney`;

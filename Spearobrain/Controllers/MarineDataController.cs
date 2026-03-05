@@ -79,7 +79,7 @@ public class MarineDataController : ControllerBase
     private static object BuildHarmonicResponse(double lat, double lng)
     {
         // Sydney (Fort Denison) constituents from BOM Tide Tables.
-        // These give predictions within ±15 cm — adequate for a spearfishing app.
+        // These give predictions within ±15 cm - adequate for a spearfishing app.
         var constituents = new[]
         {
             new { name="M2",  speed=28.984104, amp=0.527, phase=162.5 },
@@ -178,7 +178,7 @@ public class MarineDataController : ControllerBase
             var client = _http.CreateClient("MarineApi");
             var bbox   = $"{minLng},{minLat},{maxLng},{maxLat}";
 
-            // NSW SEED GeoServer — aquatic reserves layer (data.environment.nsw.gov.au)
+            // NSW SEED GeoServer - aquatic reserves layer (data.environment.nsw.gov.au)
             // Layer: env:AquaticReserve (SEED workspace)
             var url = $"{_cfg.NswGeoServer}/env/wfs" +
                       $"?service=WFS&version=2.0.0&request=GetFeature" +
@@ -197,57 +197,57 @@ public class MarineDataController : ControllerBase
         catch { /* fall through to hardcoded reserves */ }
 
         // Hardcoded key reserves near the pre-prepared locations
-        // (approximate boundaries — users should verify with NSW DPI)
+        // (approximate boundaries - users should verify with NSW DPI)
         var hardcoded = GetHardcodedRestrictions();
         return Ok(hardcoded);
     }
 
     // NSW aquatic reserves and marine park sanctuary zones where spearfishing is prohibited.
-    // Source: NSW DPI Marine Protected Areas — https://www.dpi.nsw.gov.au/fishing/marine-protected-areas
-    //         NSW DPI Spearfishing Closures  — https://www.dpi.nsw.gov.au/fishing/closures/spearfishing-closures
+    // Source: NSW DPI Marine Protected Areas - https://www.dpi.nsw.gov.au/fishing/marine-protected-areas
+    //         NSW DPI Spearfishing Closures  - https://www.dpi.nsw.gov.au/fishing/closures/spearfishing-closures
     // NOTE: Spearfishing is ALSO prohibited in ALL NSW inland waters (rivers, lakes, dams)
     //       and within 200m of any boat ramp or net-fishing area.
     // All GeoJSON coordinates are [longitude, latitude]. Polygons are placed in marine water only.
-    // These are approximate boundaries — verify with NSW DPI before diving.
+    // These are approximate boundaries - verify with NSW DPI before diving.
     private static object GetHardcodedRestrictions() => new
     {
         type     = "FeatureCollection",
-        source   = "NSW DPI — dpi.nsw.gov.au (approximate fallback, verify before diving)",
+        source   = "NSW DPI - dpi.nsw.gov.au (approximate fallback, verify before diving)",
         features = new[]
         {
-            // Cabbage Tree Bay Aquatic Reserve (Class 1, Gazetted) — in front of Shelly Beach, Manly.
+            // Cabbage Tree Bay Aquatic Reserve (Class 1, Gazetted) - in front of Shelly Beach, Manly.
             // The bay sits between Fairy Bower (N) and Shelly Beach headland (S), facing ENE.
             // All points are seaward of the beach face (lng > 151.292).
             MakeRestriction("Cabbage Tree Bay Aquatic Reserve",
-                "Class 1 Aquatic Reserve — No take, No spearfishing",
+                "Class 1 Aquatic Reserve - No take, No spearfishing",
                 new[] {
                     new[] { 151.2920, -33.7970 }, new[] { 151.2990, -33.7985 },
                     new[] { 151.2995, -33.8020 }, new[] { 151.2960, -33.8042 },
                     new[] { 151.2920, -33.8035 }, new[] { 151.2920, -33.8000 },
                     new[] { 151.2920, -33.7970 }
                 }),
-            // North Harbour Aquatic Reserve — harbour water NW of Manly between Manly and Clontarf.
+            // North Harbour Aquatic Reserve - harbour water NW of Manly between Manly and Clontarf.
             // Polygon is entirely within the North Harbour water body (no land overlap).
             MakeRestriction("North Harbour Aquatic Reserve",
-                "Aquatic Reserve — No spearfishing",
+                "Aquatic Reserve - No spearfishing",
                 new[] {
                     new[] { 151.2640, -33.7920 }, new[] { 151.2800, -33.7920 },
                     new[] { 151.2800, -33.7990 }, new[] { 151.2640, -33.7990 },
                     new[] { 151.2640, -33.7920 }
                 }),
-            // Bare Island Aquatic Reserve — surrounds Bare Island in Botany Bay (La Perouse).
+            // Bare Island Aquatic Reserve - surrounds Bare Island in Botany Bay (La Perouse).
             // Bare Island is at ~(-33.989, 151.228); polygon covers bay water around the island.
             MakeRestriction("Bare Island Aquatic Reserve",
-                "Aquatic Reserve — No spearfishing",
+                "Aquatic Reserve - No spearfishing",
                 new[] {
                     new[] { 151.2195, -33.9850 }, new[] { 151.2355, -33.9850 },
                     new[] { 151.2360, -33.9940 }, new[] { 151.2195, -33.9940 },
                     new[] { 151.2195, -33.9850 }
                 }),
-            // Malabar Headland National Park — ocean-facing sanctuary zone on the eastern headland.
+            // Malabar Headland National Park - ocean-facing sanctuary zone on the eastern headland.
             // Headland tip is at ~(-33.970, 151.248); polygon is entirely seaward (lng > 151.244).
             MakeRestriction("Malabar Headland Marine Sanctuary",
-                "National Park Sanctuary Zone — Spearfishing prohibited",
+                "National Park Sanctuary Zone - Spearfishing prohibited",
                 new[] {
                     new[] { 151.2445, -33.9580 }, new[] { 151.2580, -33.9580 },
                     new[] { 151.2590, -33.9670 }, new[] { 151.2510, -33.9750 },

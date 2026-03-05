@@ -1,6 +1,6 @@
 // ── WEATHER + SEA SURFACE TEMPERATURE LAYER ──────────────────────────────────
 // Source: Open-Meteo Marine API (no key, CORS-enabled)
-// Fetches and caches data for pre-prepared locations — surfaced in cards/drawer.
+// Fetches and caches data for pre-prepared locations - surfaced in cards/drawer.
 // Map markers removed; data consumed by ui.js cards and drawer.js sections.
 import { CONFIG, fmt, compassDir, waveColor } from './config.js';
 
@@ -55,7 +55,7 @@ async function fetchAllLocations() {
 async function fetchAndCacheLocation(loc) {
   try {
     const { marine, weather } = await fetchConditionsAt(loc.lat, loc.lng);
-    // Marine model omits wind for near-shore coords — fill from weather API.
+    // Marine model omits wind for near-shore coords - fill from weather API.
     const mc = marine?.current || {};
     const wc = weather?.current || {};
     if (marine) {
@@ -173,9 +173,9 @@ export function sstColor(t) {
 function buildWetsuitSection(sst) {
   if (sst == null) return '';
   let suit, note, color;
-  if      (sst < 10) { suit = '7mm Full Suit';     note = `${sst.toFixed(1)}°C — very cold`;  color = 'var(--cyan)'; }
-  else if (sst < 22) { suit = '3mm Full Suit';     note = `${sst.toFixed(1)}°C — temperate`;  color = 'var(--lime)'; }
-  else               { suit = 'No Wetsuit Needed'; note = `${sst.toFixed(1)}°C — warm water`; color = 'var(--coral)'; }
+  if      (sst < 10) { suit = '7mm Full Suit';     note = `${sst.toFixed(1)}°C - very cold`;  color = 'var(--cyan)'; }
+  else if (sst < 22) { suit = '3mm Full Suit';     note = `${sst.toFixed(1)}°C - temperate`;  color = 'var(--lime)'; }
+  else               { suit = 'No Wetsuit Needed'; note = `${sst.toFixed(1)}°C - warm water`; color = 'var(--coral)'; }
 
   return `<div class="d-section">
     <div class="d-section-title">Wetsuit Recommendation</div>

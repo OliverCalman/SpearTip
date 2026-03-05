@@ -50,10 +50,10 @@
     </div>
 
     <div class="layer-row" data-layer="notake">
-      <div class="l-dot" style="background:#ff69b4"></div>
+      <div class="l-dot" style="background:#ffd700"></div>
       <div class="l-info">
-        <div class="l-name">No Take Zones</div>
-        <div class="l-src"><span class="api-badge b-nsw">NSW DPI</span> sanctuary zones</div>
+        <div class="l-name">No Collecting Zones</div>
+        <div class="l-src"><span class="api-badge b-nsw">NSW DPI</span> habitat protection zones</div>
       </div>
       <div class="sw on" id="sw-notake"><div class="sw-k"></div></div>
     </div>
@@ -127,7 +127,7 @@
         <button class="species-btn" data-species="urchin"         data-color="#9b59b6"><span class="sp-dot" style="background:#9b59b6"></span>Sea Urchin</button>
         <button class="species-btn" data-species="red-urchin"     data-color="#e84393"><span class="sp-dot" style="background:#e84393"></span>Red Sea Urchin</button>
         <button class="species-btn" data-species="rock-lobster"   data-color="#e67e22"><span class="sp-dot" style="background:#e67e22"></span>Eastern Rock Lobster</button>
-        <button class="species-btn" data-species="slipper-crab"   data-color="#d35400"><span class="sp-dot" style="background:#d35400"></span>Balmain Bug</button>
+        <button class="species-btn" data-species="slipper-crab"   data-color="#d35400"><span class="sp-dot" style="background:#d35400"></span>Slipper Crab</button>
       </div>
     </div>
   </div>
@@ -140,8 +140,8 @@
   <div id="drawer-inner">
     <div class="d-loc-row">
       <div>
-        <div class="d-loc" id="d-loc">—</div>
-        <div class="d-coords" id="d-coords">—</div>
+        <div class="d-loc" id="d-loc">-</div>
+        <div class="d-coords" id="d-coords">-</div>
       </div>
       <button class="fav-btn" id="fav-btn" title="Save as favourite">☆</button>
     </div>
@@ -160,8 +160,8 @@
 @section Scripts {
   <script type="module" src="~/js/app.js"></script>
   <script>
-    document.getElementById('info-text').textContent =
-      '\u00a9 ' + new Date().getFullYear() + ' Oliver Calman. Data sources are property of their respective owners.';
+    document.getElementById('info-text').innerHTML =
+      '\u00a9 ' + new Date().getFullYear() + ' Oliver Calman. Data sources are property of their respective owners. &nbsp;\u00b7&nbsp; <a href="mailto:hello@olivercalman.com">Contact Me</a>';
     document.getElementById('info-btn').addEventListener('click', function(e) {
       e.stopPropagation();
       document.getElementById('info-panel').classList.toggle('open');

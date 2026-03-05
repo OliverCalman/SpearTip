@@ -93,7 +93,7 @@ async function loadData(lat, lng, nameHint) {
     updateFavButton(lat, lng);
 
   } catch (err) {
-    // Open-Meteo Marine returns this reason for inland points — close silently
+    // Open-Meteo Marine returns this reason for inland points - close silently
     if (err.message?.includes('No data is available')) {
       close();
       return;
@@ -116,7 +116,7 @@ function renderDrawer(lat, lng, marine, weather, depth) {
 
   let html = '';
 
-  // 1. Weather (first — quick surface conditions overview)
+  // 1. Weather (first - quick surface conditions overview)
   html += buildWeatherSection(weather);
 
   // 3. Marine conditions (waves, swell, wetsuit rec)
@@ -238,7 +238,7 @@ function assessBullShark(sst, month, rainfall24h, lat) {
     else if (sst > 17) score += 1;
   }
   if ([10, 11, 12, 1, 2, 3, 4].includes(month)) score += 1;
-  if (rainfall24h > 20) score += 1;  // murky runoff — disoriented prey
+  if (rainfall24h > 20) score += 1;  // murky runoff - disoriented prey
   if (lat > -34.0) score += 1;       // more prevalent in northern Sydney harbours
 
   const note = sst != null && sst > 20
@@ -254,7 +254,7 @@ function assessWhiteShark(sst, month) {
     if (sst >= 12 && sst <= 20) score += 2;
     else if (sst < 23) score += 1;
   } else {
-    score += 1; // unknown SST — present year-round in NSW
+    score += 1; // unknown SST - present year-round in NSW
   }
   if ([4, 5, 6, 7, 8, 9, 10].includes(month)) score += 1;
 

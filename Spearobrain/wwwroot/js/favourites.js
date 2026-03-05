@@ -99,7 +99,7 @@ function renderAll() {
 function addMarker(fav) {
   const icon = L.divIcon({
     className: '',
-    html: `<div style="font-size:20px;text-shadow:0 0 8px rgba(255,179,71,.7);
+    html: `<div style="font-size:20px;color:#ffb347;text-shadow:0 0 8px rgba(255,179,71,.7);
       cursor:pointer;line-height:1;user-select:none">★</div>`,
     iconAnchor: [10, 18],
   });

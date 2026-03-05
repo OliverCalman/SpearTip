@@ -12,7 +12,7 @@ let _lastBbox = null;
 let _loading  = false;
 
 const ZOOM_THRESHOLD = 11;
-const CLUSTER_EPS    = 0.001;   // ~100 m — connects only genuinely nearby records
+const CLUSTER_EPS    = 0.001;   // ~100 m - connects only genuinely nearby records
 const BUF_M          = 130;     // metres buffer radius per occurrence point
 const BUF_APPROX     = 12;      // circle approximation vertices per point
 const CHAIKIN_ITER   = 2;       // Chaikin smoothing passes
@@ -174,7 +174,7 @@ function buildZonePolygon(pts, centLat) {
   return chaikin(convexHull(expanded), CHAIKIN_ITER);
 }
 
-// Monotone-chain convex hull — returns CCW hull.
+// Monotone-chain convex hull - returns CCW hull.
 function convexHull(pts) {
   if (pts.length <= 2) return pts;
   const sorted = [...pts].sort((a, b) => a[1] !== b[1] ? a[1] - b[1] : a[0] - b[0]);
@@ -238,7 +238,7 @@ function addKnownSites(bounds, centLat) {
     const sp = HABITAT_SPECIES.find(s => s.key === site.type);
     if (!sp) return;
     const popup = `<div style="font-family:'Noto Sans',monospace;font-size:11px;color:${sp.color};font-weight:600">${site.name}</div>
-      <div style="font-size:10px;color:#3a5a78;margin-top:4px">${sp.name} — known site</div>`;
+      <div style="font-size:10px;color:#3a5a78;margin-top:4px">${sp.name} - known site</div>`;
     const zone = buildZonePolygon(site.pts, centLat);
     L.polygon(zone, { color: sp.color, fillColor: sp.color, fillOpacity: 0.15, weight: 1.5, opacity: 0.8, dashArray: '5 4' })
       .bindPopup(popup, { className: 'tw-popup' })

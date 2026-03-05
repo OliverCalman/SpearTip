@@ -1,7 +1,7 @@
-// ── TIDE LAYER — HARMONIC PREDICTION ─────────────────────────────────────────
+// ── TIDE LAYER - HARMONIC PREDICTION ─────────────────────────────────────────
 // Uses Sydney (Fort Denison) harmonic constituents from BOM Tide Tables.
 // Prediction accuracy: ±15 cm, suitable for spearfishing planning.
-// Map markers removed — tide data is surfaced in the drawer and rip risk only.
+// Map markers removed - tide data is surfaced in the drawer and rip risk only.
 import { CONFIG } from './config.js';
 
 // ── PUBLIC ────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ export function renderTideSection(containerEl) {
         <span class="api-badge b-bom" style="margin-left:6px">BOM HARMONIC</span>
       </div>
       <div class="tide-chart-wrap">
-        <div class="tide-chart-title">24-HOUR PREDICTION — SYDNEY (ATC)</div>
+        <div class="tide-chart-title">24-HOUR PREDICTION - SYDNEY (ATC)</div>
         <canvas id="tide-canvas" height="80"></canvas>
         <div class="tide-next">${eventsHtml}</div>
       </div>

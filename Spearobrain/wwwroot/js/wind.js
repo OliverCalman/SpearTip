@@ -1,12 +1,12 @@
 // ── WIND ARROWS ───────────────────────────────────────────────────────────────
 // Arrows that slide in the wind direction across a grid of ocean points.
 // Architecture:
-//   • fetchAndStore()    — fetches Open-Meteo at a 6×4 padded coarse grid.
+//   • fetchAndStore()    - fetches Open-Meteo at a 6×4 padded coarse grid.
 //                          Voronoi ocean mask applied.  Builds display grid of
 //                          ocean points with IDW-interpolated wind per cell.
-//   • buildDisplayPoints() — step-grid of latLng points filtered to ocean,
+//   • buildDisplayPoints() - step-grid of latLng points filtered to ocean,
 //                          with extra density where wind > 15 kn.
-//   • drawFrame(t)       — rAF loop: each point's arrow slides forward/back
+//   • drawFrame(t)       - rAF loop: each point's arrow slides forward/back
 //                          along the wind direction using a per-point phase.
 //                          Tail length ∝ speed.  Alpha fades at cycle edges.
 import { CONFIG } from './config.js';
@@ -27,6 +27,8 @@ let _currentPts = [];    // [{ px, ux, uy, spd, color, key }]
 let _phases     = new Map(); // key → phase [0, 1)
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
+
+const WIND_ZOOM_MIN = 9;   // hide arrows when viewport > ~200 km (zoom < 9)
 
 const WIND_VARS = 'wind_speed_10m,wind_direction_10m';
 
@@ -73,6 +75,11 @@ function scheduleFetch() {
 
 async function fetchAndStore() {
   if (!_visible || !_map) return;
+  if (_map.getZoom() < WIND_ZOOM_MIN) {
+    _currentPts = [];
+    _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    return;
+  }
 
   const coarseAll = buildCoarseGrid(6, 4);
 
@@ -160,6 +167,12 @@ function buildDisplayPoints() {
 
 function drawFrame(t) {
   if (!_visible) { _animFrame = null; return; }
+
+  if (_map.getZoom() < WIND_ZOOM_MIN) {
+    _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    _animFrame = requestAnimationFrame(drawFrame);
+    return;
+  }
 
   const size = _map.getSize();
   if (_canvas.width !== size.x || _canvas.height !== size.y) {
@@ -306,7 +319,7 @@ async function fetchWindAt(lat, lng) {
     let speed = c.wind_speed_10m;
     let dir   = c.wind_direction_10m;
 
-    // Marine API omits wind for many ocean/coastal coords — fall back to Weather API
+    // Marine API omits wind for many ocean/coastal coords - fall back to Weather API
     if (speed == null || dir == null) {
       const wx = await fetchWeatherWindAt(lat, lng);
       if (wx) { speed = wx.speed; dir = wx.dir; }

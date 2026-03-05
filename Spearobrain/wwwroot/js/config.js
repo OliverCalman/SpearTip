@@ -41,7 +41,7 @@ export const CONFIG = {
     },
   ],
 
-  // NSW spearfishing target species — ALA biocache occurrence data.
+  // NSW spearfishing target species - ALA biocache occurrence data.
   // Scientific names from FishBase / WoRMS taxonomy (current accepted names).
   species: [
     { id:'kingfish',       name:'Yellowtail Kingfish',  scientific:'Seriola lalandi',                    color:'#00e5ff', alaName:'Seriola lalandi' },
@@ -70,7 +70,7 @@ export const CONFIG = {
     { id:'urchin',         name:'Sea Urchin',           scientific:'Centrostephanus rodgersii',          color:'#9b59b6', alaName:'Centrostephanus rodgersii' },
     { id:'red-urchin',    name:'Red Sea Urchin',       scientific:'Heliocidaris erythrogramma',         color:'#e84393', alaName:'Heliocidaris erythrogramma' },
     { id:'rock-lobster',  name:'Eastern Rock Lobster',  scientific:'Sagmariasus verreauxi',              color:'#e67e22', alaName:'Sagmariasus verreauxi' },
-    { id:'slipper-crab',  name:'Balmain Bug',           scientific:'Ibacus peronii',                    color:'#d35400', alaName:'Ibacus peronii' },
+    { id:'slipper-crab',  name:'Slipper Crab',           scientific:'Ibacus peronii',                    color:'#d35400', alaName:'Ibacus peronii' },
   ],
 
   // Map tile providers
@@ -94,7 +94,7 @@ export const CONFIG = {
     nearestWater:     '/api/marine/nearest-water',
   },
 
-  // Harmonic tide constituents for Sydney (Fort Denison) — from BOM Tide Tables
+  // Harmonic tide constituents for Sydney (Fort Denison) - from BOM Tide Tables
   // Used client-side for fast continuous prediction
   tideConstituents: {
     msl: 0.925, // Mean sea level above LAT (m)
@@ -124,13 +124,13 @@ export function haversineKm(lat1, lng1, lat2, lng2) {
 }
 
 export function compassDir(deg) {
-  if (deg == null) return '—';
+  if (deg == null) return '-';
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
 export function fmt(v, dp = 1) {
-  return v != null ? Number(v).toFixed(dp) : '—';
+  return v != null ? Number(v).toFixed(dp) : '-';
 }
 
 export function waveColor(h) {

@@ -1,4 +1,4 @@
-// ── SPEARTIPS — ENTRY POINT ─────────────────────────────────────────────────
+// ── SPEARTIPS - ENTRY POINT ─────────────────────────────────────────────────
 // .NET MVC + JS marine conditions app for NSW spearfishing planning.
 // All external API calls use free, no-key-required sources where possible;
 // CORS-restricted APIs (BOM, NSW DPI, ALA) are proxied via /api/marine/*.
@@ -28,11 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initSpeciesLayer(map);
 
   // 4. Weather + SST data at pre-prepared locations (Open-Meteo, no key)
-  //    No map markers — data feeds location cards and the click drawer.
+  //    No map markers - data feeds location cards and the click drawer.
   initWeatherLayer();
 
   // 5. Water quality indicators (NSW Beachwatch proxy + rainfall fallback)
-  //    No map markers — data feeds the click drawer.
+  //    No map markers - data feeds the click drawer.
   initWaterQualityLayer();
 
   // 6. Favourite locations (localStorage persistence, opens drawer on click)

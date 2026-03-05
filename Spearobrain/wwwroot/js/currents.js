@@ -1,7 +1,7 @@
 // ── OCEAN CURRENTS ────────────────────────────────────────────────────────────
 // Canvas particle system driven by U/V vectors sampled from Open-Meteo Marine
 // at a GRID_COLS×GRID_ROWS viewport grid (same NEMO backbone as CMEMS).
-// Strong-current areas produce fast, bright particles — useful for spearfishing
+// Strong-current areas produce fast, bright particles - useful for spearfishing
 // planning (channel currents concentrate baitfish and pelagics).
 import { CONFIG } from './config.js';
 
@@ -90,10 +90,10 @@ async function fetchCurrent(cv, idx) {
     const vel = c.ocean_current_velocity  ?? 0;
     const dir = c.ocean_current_direction ?? 0;
     const rad = dir * Math.PI / 180;
-    // Oceanographic bearing CW from N — 0°=flowing north, 90°=flowing east
+    // Oceanographic bearing CW from N - 0°=flowing north, 90°=flowing east
     _currentVectors[idx].u = vel * Math.sin(rad);
     _currentVectors[idx].v = vel * Math.cos(rad);
-  } catch { /* point stays null — skipped in interpolation */ }
+  } catch { /* point stays null - skipped in interpolation */ }
 }
 
 // ── PARTICLE SYSTEM ───────────────────────────────────────────────────────────

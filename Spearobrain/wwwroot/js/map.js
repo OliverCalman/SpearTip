@@ -10,7 +10,7 @@ export function initMap() {
     attributionControl: true,
   }).setView(CONFIG.defaultCenter, CONFIG.defaultZoom);
 
-  // Initial tile — Dark (CartoDB Dark Matter, dark-blue CSS filter applied).
+  // Initial tile - Dark (CartoDB Dark Matter, dark-blue CSS filter applied).
   _tileLayer = makeTile(0);
   _tileLayer.addTo(_map);
   _map.getContainer().classList.add('tile-dark');

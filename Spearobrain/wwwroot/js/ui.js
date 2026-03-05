@@ -62,19 +62,19 @@ export function buildCards() {
       <div class="lc-name">${loc.name}</div>
       <div class="lc-metrics">
         <div class="lc-m">
-          <span class="lc-v" style="color:${wc}">${wh != null ? wh.toFixed(1)+'m' : '—'}</span>
+          <span class="lc-v" style="color:${wc}">${wh != null ? wh.toFixed(1)+'m' : '-'}</span>
           <span class="lc-l">Wave</span>
         </div>
         <div class="lc-m">
-          <span class="lc-v" style="color:var(--coral)">${sst != null ? sst.toFixed(1)+'°' : '—'}</span>
+          <span class="lc-v" style="color:var(--coral)">${sst != null ? sst.toFixed(1)+'°' : '-'}</span>
           <span class="lc-l">SST</span>
         </div>
         <div class="lc-m">
-          <span class="lc-v" style="color:var(--text)">${ws != null ? ws.toFixed(0)+'kn' : '—'}</span>
+          <span class="lc-v" style="color:var(--text)">${ws != null ? ws.toFixed(0)+'kn' : '-'}</span>
           <span class="lc-l">Wind</span>
         </div>
         <div class="lc-m">
-          <span class="lc-v" style="color:var(--amber)">${wg != null ? wg.toFixed(0)+'kn' : '—'}</span>
+          <span class="lc-v" style="color:var(--amber)">${wg != null ? wg.toFixed(0)+'kn' : '-'}</span>
           <span class="lc-l">Gusts</span>
         </div>
       </div>`;

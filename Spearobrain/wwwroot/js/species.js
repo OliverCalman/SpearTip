@@ -67,7 +67,7 @@ export function initSpeciesLayer(map) {
     });
   });
 
-  // Heatmap click tooltip — fires before the drawer opens
+  // Heatmap click tooltip - fires before the drawer opens
   map.on('click', e => showHeatmapTooltip(e.latlng.lat, e.latlng.lng));
 
   // Refetch ALA data when the user pans far from last fetch centre
